@@ -63,7 +63,6 @@ class EbayClient
         $response = curl_exec($ch);
         $error = curl_error($ch);
         $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
 
         if ($response === false) {
             throw new RuntimeException("eBay request failed: $error");
@@ -83,7 +82,6 @@ class EbayClient
         $response = curl_exec($ch);
         $error = curl_error($ch);
         $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
 
         if ($response === false) {
             throw new RuntimeException("eBay request failed: $error");
@@ -178,6 +176,18 @@ class EbayClient
         ];
     }
 
+    private function tradingErrorMessage(?SimpleXMLElement $xml, string $rawResponse): string
+    {
+        if (!$xml) {
+            return 'Unparseable response from eBay.';
+        }
+        $messages = [];
+        foreach ($xml->Errors as $err) {
+            $messages[] = (string) $err->LongMessage;
+        }
+        return $messages ? implode('; ', $messages) : $rawResponse;
+    }
+
     /**
      * Step 1 of connecting an eBay account: get a temporary SessionID that identifies
      * this authorization attempt, then send the user to signInUrl() to log in and grant access.
@@ -194,7 +204,7 @@ class EbayClient
         $xml = simplexml_load_string($response);
 
         if (!$xml || (string) $xml->Ack === 'Failure') {
-            throw new RuntimeException('GetSessionID failed: ' . $response);
+            throw new RuntimeException($this->tradingErrorMessage($xml ?: null, $response));
         }
 
         return (string) $xml->SessionID;
@@ -222,7 +232,7 @@ class EbayClient
         $xml = simplexml_load_string($response);
 
         if (!$xml || (string) $xml->Ack === 'Failure') {
-            throw new RuntimeException('FetchToken failed: ' . $response);
+            throw new RuntimeException($this->tradingErrorMessage($xml ?: null, $response));
         }
 
         return [
@@ -252,16 +262,12 @@ class EbayClient
         $xml = simplexml_load_string($response);
 
         if (!$xml) {
-            return ['success' => false, 'message' => 'Unparseable response: ' . $response];
+            return ['success' => false, 'message' => $this->tradingErrorMessage(null, $response)];
         }
 
         $ack = (string) $xml->Ack;
         if ($ack === 'Failure') {
-            $errors = [];
-            foreach ($xml->Errors as $err) {
-                $errors[] = (string) $err->LongMessage;
-            }
-            return ['success' => false, 'message' => implode('; ', $errors) ?: 'Unknown error'];
+            return ['success' => false, 'message' => $this->tradingErrorMessage($xml, $response)];
         }
 
         return ['success' => true, 'message' => "Ack: $ack, HighBidder: " . (string) $xml->Offer->HighBidder->UserID];
