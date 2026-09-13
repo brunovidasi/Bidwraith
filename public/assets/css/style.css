@@ -47,18 +47,26 @@ body {
 }
 
 .container {
-    max-width: 860px;
+    max-width: 1100px;
     margin: 0 auto;
     padding: 24px;
 }
 
 h1 { font-size: 1.4rem; }
 
+.table-scroll {
+    overflow-x: auto;
+}
+
 table {
     width: 100%;
     border-collapse: collapse;
     margin-top: 12px;
+    white-space: nowrap;
 }
+
+td { white-space: normal; }
+td:first-child { white-space: nowrap; }
 
 th, td {
     text-align: left;
@@ -141,3 +149,30 @@ button.danger { background: var(--danger); }
 
 .actions-cell form { display: inline; }
 .actions-cell button { margin-top: 0; padding: 4px 10px; font-size: 0.85rem; }
+
+.warning-badge {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: #fdecea;
+    color: var(--danger);
+    font-size: 0.8rem;
+}
+
+.inline-bid-form {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.inline-bid-form input[type=number] {
+    width: 90px;
+    padding: 4px 6px;
+}
+
+.inline-bid-form button {
+    margin-top: 0;
+    padding: 4px 10px;
+    font-size: 0.85rem;
+}

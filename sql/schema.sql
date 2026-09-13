@@ -35,6 +35,10 @@ CREATE TABLE IF NOT EXISTS watched_auctions (
     status               TEXT NOT NULL DEFAULT 'pending',
     last_checked_at      TEXT,
     result_message       TEXT,
+    current_price        REAL,
+    shipping_cost        REAL,
+    item_country         TEXT,
+    price_checked_at     TEXT,
     created_at           TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

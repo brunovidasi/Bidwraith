@@ -20,15 +20,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $title = null;
         $endTime = $manualEndTime !== '' ? date('Y-m-d H:i:s', strtotime($manualEndTime)) : null;
+        $lookup = null;
 
         try {
             $client = new EbayClient();
             $lookup = $client->getItemByLegacyId($itemId);
-            if ($lookup) {
+            if ($lookup && !empty($lookup['end_time'])) {
                 $title = $lookup['title'];
-                if (!empty($lookup['end_time'])) {
-                    $endTime = date('Y-m-d H:i:s', strtotime($lookup['end_time']));
-                }
+                $endTime = date('Y-m-d H:i:s', strtotime($lookup['end_time']));
             }
         } catch (Throwable $e) {
             // Lookup is best-effort; fall through to manual end time if given.
@@ -39,10 +38,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $lookupFailed = true;
         } else {
             $stmt = db()->prepare('
-                INSERT INTO watched_auctions (user_id, item_id, title, max_bid, end_time, snipe_seconds_before)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO watched_auctions
+                    (user_id, item_id, title, max_bid, end_time, snipe_seconds_before, current_price, shipping_cost, item_country, price_checked_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime(\'now\'))
             ');
-            $stmt->execute([$user['id'], $itemId, $title, $maxBid, $endTime, $snipeSeconds]);
+            $stmt->execute([
+                $user['id'], $itemId, $title, $maxBid, $endTime, $snipeSeconds,
+                $lookup['current_price'] ?? null, $lookup['shipping_cost'] ?? null, $lookup['item_country'] ?? null,
+            ]);
             set_flash('success', 'Auction added to your watchlist.');
             redirect('dashboard.php');
         }

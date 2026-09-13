@@ -157,9 +157,17 @@ class EbayClient
             return null;
         }
 
+        // currentBidPrice is only present once an auction has at least one bid;
+        // before that, price reflects the starting price.
+        $currentPrice = $data['currentBidPrice']['value'] ?? $data['price']['value'] ?? null;
+        $shippingCost = $data['shippingOptions'][0]['shippingCost']['value'] ?? null;
+
         return [
             'title' => $data['title'] ?? null,
             'end_time' => $data['itemEndDate'] ?? null,
+            'current_price' => $currentPrice !== null ? (float) $currentPrice : null,
+            'shipping_cost' => $shippingCost !== null ? (float) $shippingCost : null,
+            'item_country' => $data['itemLocation']['country'] ?? null,
         ];
     }
 
