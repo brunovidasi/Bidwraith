@@ -10,7 +10,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $itemId = trim($_POST['item_id'] ?? '');
     $maxBid = (float) ($_POST['max_bid'] ?? 0);
-    $snipeSeconds = max(2, (int) ($_POST['snipe_seconds_before'] ?? 5));
+    $snipeSeconds = max(2, (int) ($_POST['snipe_seconds_before'] ?? 3));
     $manualEndTime = trim($_POST['end_time'] ?? '');
 
     if ($itemId === '') {
@@ -50,6 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $pageTitle = 'Add auction';
+$currency = ebay_config()['currency'];
 require __DIR__ . '/../includes/layout_top.php';
 ?>
 <h1>Add an auction</h1>
@@ -61,12 +62,12 @@ require __DIR__ . '/../includes/layout_top.php';
     <input type="text" id="item_id" name="item_id" required value="<?= htmlspecialchars($_POST['item_id'] ?? '') ?>">
     <div class="hint">The number at the end of the listing URL, e.g. 123456789012.</div>
 
-    <label for="max_bid">Max bid (USD)</label>
+    <label for="max_bid">Max bid (<?= htmlspecialchars($currency) ?>)</label>
     <input type="number" id="max_bid" name="max_bid" step="0.01" min="0.01" required value="<?= htmlspecialchars($_POST['max_bid'] ?? '') ?>">
 
     <label for="snipe_seconds_before">Bid this many seconds before the auction ends</label>
-    <input type="number" id="snipe_seconds_before" name="snipe_seconds_before" min="2" max="60" value="<?= htmlspecialchars($_POST['snipe_seconds_before'] ?? '5') ?>">
-    <div class="hint">Lower is more "snipe-y" but riskier if eBay/network is slow. 5 seconds is a safe default.</div>
+    <input type="number" id="snipe_seconds_before" name="snipe_seconds_before" min="2" max="60" value="<?= htmlspecialchars($_POST['snipe_seconds_before'] ?? '3') ?>">
+    <div class="hint">Most sniping tools fire 1–10 seconds before the end. 3 seconds is a good default — low enough to snipe, with enough margin for network delay.</div>
 
     <?php if ($lookupFailed): ?>
         <label for="end_time">Auction end time (since it couldn't be looked up automatically)</label>

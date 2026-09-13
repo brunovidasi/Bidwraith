@@ -14,6 +14,12 @@ return [
     'ebay_environment' => 'sandbox',
 
     'ebay' => [
+        // See https://developer.ebay.com/api-docs/static/rest-request-components.html#marketp
+        // for other marketplace/site IDs. 15/EBAY_AU/AUD shown here as an example (Australia).
+        'site_id' => 15,
+        'marketplace_id' => 'EBAY_AU',
+        'currency' => 'AUD',
+
         'sandbox' => [
             'app_id'  => '',
             'dev_id'  => '',

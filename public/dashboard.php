@@ -12,6 +12,7 @@ $stmt2->execute([$user['id']]);
 $hasEbayAccount = (bool) $stmt2->fetchColumn();
 
 $pageTitle = 'Watchlist';
+$currency = ebay_config()['currency'];
 require __DIR__ . '/../includes/layout_top.php';
 ?>
 <h1>Your watchlist</h1>
@@ -34,7 +35,7 @@ require __DIR__ . '/../includes/layout_top.php';
             <th>Title</th>
             <th>Item ID</th>
             <th>Ends</th>
-            <th>Max bid</th>
+            <th>Max bid (<?= htmlspecialchars($currency) ?>)</th>
             <th>Status</th>
             <th></th>
         </tr>
@@ -45,7 +46,7 @@ require __DIR__ . '/../includes/layout_top.php';
             <td><?= htmlspecialchars($a['title'] ?? '(unknown title)') ?></td>
             <td><?= htmlspecialchars($a['item_id']) ?></td>
             <td><?= htmlspecialchars($a['end_time'] ?? 'unknown') ?></td>
-            <td>$<?= htmlspecialchars(number_format($a['max_bid'], 2)) ?></td>
+            <td><?= htmlspecialchars(number_format($a['max_bid'], 2)) ?></td>
             <td class="status-<?= htmlspecialchars($a['status']) ?>"><?= htmlspecialchars($a['status']) ?></td>
             <td class="actions-cell">
                 <form method="post" action="delete_auction.php" data-confirm="Remove this auction from your watchlist?">

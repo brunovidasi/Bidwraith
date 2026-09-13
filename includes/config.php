@@ -20,5 +20,10 @@ function ebay_config(): array
 {
     $config = app_config();
     $env = $config['ebay_environment'];
-    return $config['ebay'][$env] + ['environment' => $env];
+    return $config['ebay'][$env] + [
+        'environment' => $env,
+        'site_id' => $config['ebay']['site_id'],
+        'marketplace_id' => $config['ebay']['marketplace_id'],
+        'currency' => $config['ebay']['currency'],
+    ];
 }

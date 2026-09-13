@@ -145,7 +145,7 @@ class EbayClient
 
         [$status, $body] = $this->httpGet($url, [
             'Authorization: Bearer ' . $token,
-            'X-EBAY-C-MARKETPLACE-ID: EBAY_US',
+            'X-EBAY-C-MARKETPLACE-ID: ' . $this->cfg['marketplace_id'],
         ]);
 
         if ($status !== 200) {
@@ -167,7 +167,7 @@ class EbayClient
     {
         return [
             'X-EBAY-API-COMPATIBILITY-LEVEL: 1193',
-            'X-EBAY-API-SITEID: 0',
+            'X-EBAY-API-SITEID: ' . $this->cfg['site_id'],
             'X-EBAY-API-CALL-NAME: ' . $callName,
             'X-EBAY-API-APP-NAME: ' . $this->cfg['app_id'],
             'X-EBAY-API-DEV-NAME: ' . $this->cfg['dev_id'],
@@ -253,7 +253,7 @@ class EbayClient
             . '<ItemID>' . htmlspecialchars($itemId) . '</ItemID>'
             . '<Offer>'
             . '<Action>Bid</Action>'
-            . '<MaxBid currencyID="USD">' . htmlspecialchars((string) $maxBid) . '</MaxBid>'
+            . '<MaxBid currencyID="' . htmlspecialchars($this->cfg['currency']) . '">' . htmlspecialchars((string) $maxBid) . '</MaxBid>'
             . '<Quantity>1</Quantity>'
             . '</Offer>'
             . '</PlaceOfferRequest>';

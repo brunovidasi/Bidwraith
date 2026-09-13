@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS watched_auctions (
     title                TEXT,
     max_bid              REAL NOT NULL,
     end_time             TEXT,
-    snipe_seconds_before INTEGER NOT NULL DEFAULT 5,
+    snipe_seconds_before INTEGER NOT NULL DEFAULT 3,
     status               TEXT NOT NULL DEFAULT 'pending',
     last_checked_at      TEXT,
     result_message       TEXT,
