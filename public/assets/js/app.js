@@ -5,3 +5,16 @@ document.querySelectorAll('form[data-confirm]').forEach(function (form) {
         }
     });
 });
+
+document.querySelectorAll('[data-add-step]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        var form = btn.closest('form');
+        var nextHidden = form.querySelector('.bid-step-row[hidden]');
+        if (nextHidden) {
+            nextHidden.hidden = false;
+        }
+        if (!form.querySelector('.bid-step-row[hidden]')) {
+            btn.hidden = true;
+        }
+    });
+});

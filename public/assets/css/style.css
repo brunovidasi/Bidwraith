@@ -160,19 +160,35 @@ button.danger { background: var(--danger); }
     font-size: 0.8rem;
 }
 
-.inline-bid-form {
+.bid-step-row {
     display: flex;
-    gap: 6px;
-    margin-top: 6px;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
 }
 
-.inline-bid-form input[type=number] {
-    width: 90px;
-    padding: 4px 6px;
+.bid-step-row[hidden] {
+    display: none;
 }
 
-.inline-bid-form button {
-    margin-top: 0;
-    padding: 4px 10px;
+.bid-step-row .step-label {
+    width: 52px;
+    flex-shrink: 0;
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+.bid-step-row input[type=number] {
+    width: auto;
+    flex: 1;
+    padding: 6px 8px;
+}
+
+.bid-steps-summary {
+    list-style: none;
+    margin: 0;
+    padding: 0;
     font-size: 0.85rem;
 }
+
+.bid-steps-summary li { margin-top: 2px; }

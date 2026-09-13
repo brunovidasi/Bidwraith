@@ -1,16 +1,18 @@
 # eBay Bidder
 
 A small personal web app for auction sniping on eBay: add item IDs to a watchlist
-with a max bid, and a cron job fires a proxy bid a few seconds before each auction
-ends — even if your browser is closed.
+with up to 5 scheduled bids each (e.g. a moderate bid at 10s before the end, a
+higher one at 3s, your real ceiling at the last second), and a cron job fires them
+at the exact right moment — even if your browser is closed.
 
 Built as plain PHP + SQLite on purpose: no framework, no build step, no Composer
 install required. Copy the files to any PHP host and it runs.
 
 ## How it works
 
-- **Web app** (`public/`): log in, add auctions by eBay item ID + your max bid,
-  see status on a dashboard.
+- **Web app** (`public/`): log in, add auctions by eBay item ID with a ladder of
+  timed bids, see live status/current price and an edit page per auction on the
+  dashboard.
 - **eBay connection**: you authorize the app once via eBay's sign-in page (like any
   "Connect your eBay account" flow — this app never sees your eBay password).
   Bidding uses eBay's Trading API `PlaceOffer` call, the same mechanism eBay's own

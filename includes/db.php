@@ -43,4 +43,57 @@ function run_migrations(PDO $db): void
             }
         }
     }
+
+    migrate_single_bid_to_steps($db);
+}
+
+/**
+ * One-time migration from the original single max_bid/snipe_seconds_before columns
+ * on watched_auctions to the bid_steps table (which supports up to 5 scheduled bids
+ * per auction). Runs only for databases created before this change — the columns
+ * are gone afterwards, so the guard below is false on every later request.
+ */
+function migrate_single_bid_to_steps(PDO $db): void
+{
+    $columns = array_column($db->query('PRAGMA table_info(watched_auctions)')->fetchAll(PDO::FETCH_ASSOC), 'name');
+    if (!in_array('max_bid', $columns, true)) {
+        return;
+    }
+
+    $rows = $db->query('SELECT id, max_bid, snipe_seconds_before, status, result_message, last_checked_at FROM watched_auctions')->fetchAll(PDO::FETCH_ASSOC);
+    $insert = $db->prepare('
+        INSERT OR IGNORE INTO bid_steps (watched_auction_id, seconds_before, max_bid, status, fired_at, result_message)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ');
+    foreach ($rows as $row) {
+        $stepStatus = in_array($row['status'], ['bid_placed', 'failed'], true) ? $row['status'] : 'pending';
+        $insert->execute([
+            $row['id'],
+            $row['snipe_seconds_before'],
+            $row['max_bid'],
+            $stepStatus,
+            $stepStatus !== 'pending' ? $row['last_checked_at'] : null,
+            $stepStatus !== 'pending' ? $row['result_message'] : null,
+        ]);
+    }
+
+    $db->exec('ALTER TABLE watched_auctions DROP COLUMN max_bid');
+    $db->exec('ALTER TABLE watched_auctions DROP COLUMN snipe_seconds_before');
+
+    // bid_log used to reference watched_auctions directly; it now references the
+    // specific bid_steps row that fired. It's internal audit history only (never
+    // shown in the UI), so recreating it empty is simpler than remapping old rows.
+    $logColumns = array_column($db->query('PRAGMA table_info(bid_log)')->fetchAll(PDO::FETCH_ASSOC), 'name');
+    if (in_array('watched_auction_id', $logColumns, true)) {
+        $db->exec('DROP TABLE bid_log');
+        $db->exec('
+            CREATE TABLE bid_log (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                bid_step_id      INTEGER NOT NULL REFERENCES bid_steps(id) ON DELETE CASCADE,
+                attempted_at     TEXT NOT NULL DEFAULT (datetime(\'now\')),
+                success          INTEGER NOT NULL,
+                response_summary TEXT
+            )
+        ');
+    }
 }

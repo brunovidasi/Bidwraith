@@ -9,15 +9,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
 
     $itemId = trim($_POST['item_id'] ?? '');
-    $maxBid = (float) ($_POST['max_bid'] ?? 0);
-    $snipeSeconds = max(2, (int) ($_POST['snipe_seconds_before'] ?? 3));
     $manualEndTime = trim($_POST['end_time'] ?? '');
+
+    $steps = [];
+    $secondsInput = $_POST['step_seconds'] ?? [];
+    $maxBidInput = $_POST['step_max_bid'] ?? [];
+    foreach ($secondsInput as $i => $secondsRaw) {
+        $maxBidRaw = $maxBidInput[$i] ?? '';
+        if (trim((string) $secondsRaw) === '' || trim((string) $maxBidRaw) === '') {
+            continue;
+        }
+        $steps[] = ['seconds_before' => (int) $secondsRaw, 'max_bid' => (float) $maxBidRaw];
+    }
 
     if ($itemId === '') {
         $error = 'Enter an eBay item ID.';
-    } elseif ($maxBid <= 0) {
-        $error = 'Enter a max bid greater than 0.';
+    } elseif (empty($steps)) {
+        $error = 'Add at least one bid: how many seconds before the end, and the max amount.';
+    } elseif (count($steps) > 5) {
+        $error = 'You can have at most 5 bids per auction.';
     } else {
+        $secondsSeen = [];
+        foreach ($steps as $s) {
+            if ($s['seconds_before'] < 1 || $s['seconds_before'] > 60) {
+                $error = 'Seconds before end must be between 1 and 60.';
+                break;
+            }
+            if ($s['max_bid'] <= 0) {
+                $error = 'Each max bid must be greater than 0.';
+                break;
+            }
+            if (in_array($s['seconds_before'], $secondsSeen, true)) {
+                $error = 'Each bid must use a different number of seconds before the end.';
+                break;
+            }
+            $secondsSeen[] = $s['seconds_before'];
+        }
+    }
+
+    if (!$error) {
         $title = null;
         $endTime = $manualEndTime !== '' ? date('Y-m-d H:i:s', strtotime($manualEndTime)) : null;
         $lookup = null;
@@ -37,19 +67,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = "Couldn't find that item automatically (this is expected in the eBay Sandbox for real item IDs). Enter the auction end time manually below and save again.";
             $lookupFailed = true;
         } else {
+            db()->beginTransaction();
             $stmt = db()->prepare('
-                INSERT INTO watched_auctions
-                    (user_id, item_id, title, max_bid, end_time, snipe_seconds_before, current_price, shipping_cost, item_country, price_checked_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime(\'now\'))
+                INSERT INTO watched_auctions (user_id, item_id, title, end_time, current_price, shipping_cost, item_country, price_checked_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, datetime(\'now\'))
             ');
             $stmt->execute([
-                $user['id'], $itemId, $title, $maxBid, $endTime, $snipeSeconds,
+                $user['id'], $itemId, $title, $endTime,
                 $lookup['current_price'] ?? null, $lookup['shipping_cost'] ?? null, $lookup['item_country'] ?? null,
             ]);
+            $auctionId = (int) db()->lastInsertId();
+
+            $stepStmt = db()->prepare('INSERT INTO bid_steps (watched_auction_id, seconds_before, max_bid) VALUES (?, ?, ?)');
+            foreach ($steps as $s) {
+                $stepStmt->execute([$auctionId, $s['seconds_before'], $s['max_bid']]);
+            }
+            db()->commit();
+
             set_flash('success', 'Auction added to your watchlist.');
             redirect('dashboard.php');
         }
     }
+}
+
+$repopulateSteps = [];
+foreach (($_POST['step_seconds'] ?? []) as $i => $secondsRaw) {
+    $maxBidRaw = ($_POST['step_max_bid'] ?? [])[$i] ?? '';
+    if ($secondsRaw === '' && $maxBidRaw === '') {
+        continue;
+    }
+    $repopulateSteps[] = ['id' => '', 'seconds_before' => $secondsRaw, 'max_bid' => $maxBidRaw, 'readonly' => false, 'status' => null];
 }
 
 $pageTitle = 'Add auction';
@@ -65,12 +112,13 @@ require __DIR__ . '/../includes/layout_top.php';
     <input type="text" id="item_id" name="item_id" required value="<?= htmlspecialchars($_POST['item_id'] ?? '') ?>">
     <div class="hint">The number at the end of the listing URL, e.g. 123456789012.</div>
 
-    <label for="max_bid">Max bid (<?= htmlspecialchars($currency) ?>)</label>
-    <input type="number" id="max_bid" name="max_bid" step="0.01" min="0.01" required value="<?= htmlspecialchars($_POST['max_bid'] ?? '') ?>">
-
-    <label for="snipe_seconds_before">Bid this many seconds before the auction ends</label>
-    <input type="number" id="snipe_seconds_before" name="snipe_seconds_before" min="2" max="60" value="<?= htmlspecialchars($_POST['snipe_seconds_before'] ?? '3') ?>">
-    <div class="hint">Most sniping tools fire 1–10 seconds before the end. 3 seconds is a good default — low enough to snipe, with enough margin for network delay.</div>
+    <label>Bids (up to 5, timed before the auction ends)</label>
+    <div class="hint">
+        E.g. <?= htmlspecialchars($currency) ?> 50 at 10s before, <?= htmlspecialchars($currency) ?> 60 at 3s before,
+        <?= htmlspecialchars($currency) ?> 70 at 1s before (the last second) — each one only fires if you haven't
+        already won at an earlier, lower bid.
+    </div>
+    <?php render_bid_step_rows($repopulateSteps, $currency); ?>
 
     <?php if ($lookupFailed): ?>
         <label for="end_time">Auction end time (since it couldn't be looked up automatically)</label>
@@ -79,4 +127,5 @@ require __DIR__ . '/../includes/layout_top.php';
 
     <button type="submit">Save</button>
 </form>
+<script src="assets/js/app.js"></script>
 <?php require __DIR__ . '/../includes/layout_bottom.php'; ?>

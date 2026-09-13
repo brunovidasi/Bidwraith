@@ -36,6 +36,8 @@ foreach ($auctions as &$a) {
 }
 unset($a);
 
+$stepsStmt = db()->prepare('SELECT * FROM bid_steps WHERE watched_auction_id = ? ORDER BY seconds_before DESC');
+
 $pageTitle = 'Watchlist';
 $currency = ebay_config()['currency'];
 $homeCountry = marketplace_country_code(ebay_config()['marketplace_id']);
@@ -64,16 +66,20 @@ require __DIR__ . '/../includes/layout_top.php';
             <th>Ends</th>
             <th>Current price</th>
             <th>Status</th>
-            <th>Your max bid</th>
+            <th>Your bids</th>
             <th>Est. total if you win</th>
             <th></th>
         </tr>
     </thead>
     <tbody>
     <?php foreach ($auctions as $a):
+        $stepsStmt->execute([$a['id']]);
+        $steps = $stepsStmt->fetchAll(PDO::FETCH_ASSOC);
+        $effectiveMaxBid = $steps ? max(array_column($steps, 'max_bid')) : 0.0;
+
         $currentPrice = $a['current_price'];
-        $outbid = $currentPrice !== null && in_array($a['status'], ['pending', 'bid_placed'], true) && (float) $currentPrice >= (float) $a['max_bid'];
-        $estimate = estimate_landed_cost((float) $a['max_bid'], $a['shipping_cost'], $a['item_country'], $homeCountry);
+        $outbid = $currentPrice !== null && in_array($a['status'], ['pending', 'bid_placed'], true) && (float) $currentPrice >= $effectiveMaxBid;
+        $estimate = estimate_landed_cost($effectiveMaxBid, $a['shipping_cost'], $a['item_country'], $homeCountry);
     ?>
         <tr>
             <td><?= htmlspecialchars($a['title'] ?? '(unknown title)') ?></td>
@@ -92,20 +98,22 @@ require __DIR__ . '/../includes/layout_top.php';
                 <?php endif; ?>
             </td>
             <td>
-                <?= htmlspecialchars($currency . ' ' . number_format($a['max_bid'], 2)) ?>
+                <ul class="bid-steps-summary">
+                <?php foreach ($steps as $s): ?>
+                    <li>
+                        <?= (int) $s['seconds_before'] ?>s: <?= htmlspecialchars($currency . ' ' . number_format($s['max_bid'], 2)) ?>
+                        <span class="status-<?= htmlspecialchars($s['status']) ?>">(<?= htmlspecialchars($s['status']) ?>)</span>
+                    </li>
+                <?php endforeach; ?>
+                </ul>
                 <?php if (!in_array($a['status'], ['won', 'lost'], true)): ?>
-                    <form method="post" action="update_bid.php" class="inline-bid-form">
-                        <?= csrf_field() ?>
-                        <input type="hidden" name="id" value="<?= (int) $a['id'] ?>">
-                        <input type="number" name="new_max_bid" step="0.01" min="<?= htmlspecialchars($a['max_bid'] + 0.01) ?>" placeholder="New max">
-                        <button type="submit" class="secondary">Raise</button>
-                    </form>
+                    <a href="edit_auction.php?id=<?= (int) $a['id'] ?>">Edit bids</a>
                 <?php endif; ?>
             </td>
             <td>
                 <?= htmlspecialchars($currency . ' ' . number_format($estimate['total'], 2)) ?>
                 <div class="hint">
-                    max bid <?= number_format($a['max_bid'], 2) ?>
+                    highest bid <?= number_format($effectiveMaxBid, 2) ?>
                     + shipping <?= number_format($estimate['shipping'], 2) ?>
                     + buyer protection fee (est.) <?= number_format($estimate['buyer_protection_fee'], 2) ?>
                     <?php if ($estimate['gst'] > 0): ?>
@@ -129,10 +137,11 @@ require __DIR__ . '/../includes/layout_top.php';
 </table>
 </div>
 <p class="hint">
-    "Est. total if you win" is a best-effort estimate: your max bid (worst case — proxy bidding
-    may win it for less) + shipping + eBay's published Buyer Protection fee (waived by some
-    business/Pro sellers, which the API doesn't tell us) + GST on low-value imports where the item
-    ships from outside <?= htmlspecialchars($homeCountry) ?> and eBay hasn't already included it in the price.
+    "Est. total if you win" is a best-effort estimate based on your highest configured bid (worst
+    case — proxy bidding may win it for less): highest bid + shipping + eBay's published Buyer
+    Protection fee (waived by some business/Pro sellers, which the API doesn't tell us) + GST on
+    low-value imports where the item ships from outside <?= htmlspecialchars($homeCountry) ?> and
+    eBay hasn't already included it in the price.
 </p>
 <?php endif; ?>
 
