@@ -39,11 +39,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $toUpdate = [];
     $toInsert = [];
     $finalSecondsBefore = [];
+    $finalSteps = [];
 
     // Steps that already fired are fixed regardless of what was submitted for them.
     foreach ($existingById as $id => $row) {
         if ($row['status'] !== 'pending') {
             $finalSecondsBefore[] = (int) $row['seconds_before'];
+            $finalSteps[] = ['seconds_before' => (int) $row['seconds_before'], 'max_bid' => (float) $row['max_bid']];
         }
     }
 
@@ -83,6 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
         }
         $finalSecondsBefore[] = $seconds;
+        $finalSteps[] = ['seconds_before' => $seconds, 'max_bid' => $maxBid];
 
         if ($existing) {
             $toUpdate[] = ['id' => (int) $stepId, 'seconds_before' => $seconds, 'max_bid' => $maxBid];
@@ -93,6 +96,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$error && count($finalSecondsBefore) > 5) {
         $error = 'You can have at most 5 bids per auction.';
+    }
+
+    if (!$error) {
+        $error = validate_bid_step_ordering($finalSteps);
     }
 
     if (!$error) {
@@ -151,6 +158,6 @@ require __DIR__ . '/../includes/layout_top.php';
         <button type="submit">Save</button>
     <?php endif; ?>
 </form>
-<p><a href="dashboard.php">&larr; Back to watchlist</a></p>
+<p><a href="dashboard.php">&larr; Back to auction list</a></p>
 <script src="assets/js/app.js"></script>
 <?php require __DIR__ . '/../includes/layout_bottom.php'; ?>

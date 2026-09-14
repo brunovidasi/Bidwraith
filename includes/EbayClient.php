@@ -280,4 +280,44 @@ class EbayClient
 
         return ['success' => true, 'message' => "Ack: $ack, HighBidder: " . (string) $xml->Offer->HighBidder->UserID];
     }
+
+    /**
+     * The items the user is actually watching on eBay itself (Site Preferences ->
+     * Watch List), as opposed to this app's own auction list. Uses the same
+     * Auth'n'Auth token already stored for bidding — no separate OAuth needed.
+     */
+    public function getWatchList(string $authToken): array
+    {
+        $body = '<?xml version="1.0" encoding="utf-8"?>'
+            . '<GetMyeBayBuyingRequest xmlns="urn:ebay:apis:eBLBaseComponents">'
+            . '<RequesterCredentials><eBayAuthToken>' . htmlspecialchars($authToken) . '</eBayAuthToken></RequesterCredentials>'
+            . '<WatchList><Include>true</Include><Pagination><EntriesPerPage>200</EntriesPerPage></Pagination></WatchList>'
+            . '<DetailLevel>ReturnSummary</DetailLevel>'
+            . '</GetMyeBayBuyingRequest>';
+
+        [, $response] = $this->httpPost($this->tradingEndpoint(), $this->tradingHeaders('GetMyeBayBuying'), $body);
+        $xml = simplexml_load_string($response);
+
+        if (!$xml || (string) $xml->Ack === 'Failure') {
+            throw new RuntimeException($this->tradingErrorMessage($xml ?: null, $response));
+        }
+
+        $items = [];
+        if (isset($xml->WatchList->ItemArray->Item)) {
+            foreach ($xml->WatchList->ItemArray->Item as $item) {
+                $items[] = [
+                    'item_id' => (string) $item->ItemID,
+                    'title' => (string) $item->Title,
+                    'end_time' => (string) $item->ListingDetails->EndTime,
+                    'view_url' => (string) $item->ListingDetails->ViewItemURL,
+                    'gallery_url' => (string) $item->PictureDetails->GalleryURL,
+                    'current_price' => isset($item->SellingStatus->CurrentPrice) ? (float) $item->SellingStatus->CurrentPrice : null,
+                    'currency' => (string) ($item->SellingStatus->CurrentPrice['currencyID'] ?? ''),
+                    'bid_count' => isset($item->SellingStatus->BidCount) ? (int) $item->SellingStatus->BidCount : null,
+                ];
+            }
+        }
+
+        return $items;
+    }
 }

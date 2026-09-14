@@ -1,4 +1,6 @@
-# eBay Bidder
+# Bidwraith
+
+_eBay Bidder_
 
 A small personal web app for auction sniping on eBay: add item IDs to a watchlist
 with up to 5 scheduled bids each (e.g. a moderate bid at 10s before the end, a

@@ -38,12 +38,12 @@ unset($a);
 
 $stepsStmt = db()->prepare('SELECT * FROM bid_steps WHERE watched_auction_id = ? ORDER BY seconds_before DESC');
 
-$pageTitle = 'Watchlist';
+$pageTitle = 'Auction list';
 $currency = ebay_config()['currency'];
 $homeCountry = marketplace_country_code(ebay_config()['marketplace_id']);
 require __DIR__ . '/../includes/layout_top.php';
 ?>
-<h1>Your watchlist</h1>
+<h1>Your auction list</h1>
 
 <?php if (!$hasEbayAccount): ?>
     <div class="flash flash-error">
@@ -57,21 +57,7 @@ require __DIR__ . '/../includes/layout_top.php';
 <?php if (empty($auctions)): ?>
     <p class="hint">No auctions yet. Add one by eBay item ID and set your max bid.</p>
 <?php else: ?>
-<div class="table-scroll">
-<table>
-    <thead>
-        <tr>
-            <th>Title</th>
-            <th>Item ID</th>
-            <th>Ends</th>
-            <th>Current price</th>
-            <th>Status</th>
-            <th>Your bids</th>
-            <th>Est. total if you win</th>
-            <th></th>
-        </tr>
-    </thead>
-    <tbody>
+<div class="entries">
     <?php foreach ($auctions as $a):
         $stepsStmt->execute([$a['id']]);
         $steps = $stepsStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -81,23 +67,23 @@ require __DIR__ . '/../includes/layout_top.php';
         $outbid = $currentPrice !== null && in_array($a['status'], ['pending', 'bid_placed'], true) && (float) $currentPrice >= $effectiveMaxBid;
         $estimate = estimate_landed_cost($effectiveMaxBid, $a['shipping_cost'], $a['item_country'], $homeCountry);
     ?>
-        <tr>
-            <td><?= htmlspecialchars($a['title'] ?? '(unknown title)') ?></td>
-            <td><?= htmlspecialchars($a['item_id']) ?></td>
-            <td><?= htmlspecialchars($a['end_time'] ?? 'unknown') ?></td>
-            <td>
-                <?= $currentPrice !== null ? htmlspecialchars($currency . ' ' . number_format($currentPrice, 2)) : '—' ?>
-            </td>
-            <td>
-                <span class="status-<?= htmlspecialchars($a['status']) ?>"><?= htmlspecialchars($a['status']) ?></span>
+        <article class="entry">
+            <div class="entry-main">
+                <h3 class="entry-title"><?= htmlspecialchars($a['title'] ?? '(unknown title)') ?></h3>
+                <p class="entry-meta">
+                    Item <?= htmlspecialchars($a['item_id']) ?>
+                    <span class="sep">·</span>
+                    Ends <?= htmlspecialchars($a['end_time'] ?? 'unknown') ?>
+                    <span class="sep">·</span>
+                    <span class="status-<?= htmlspecialchars($a['status']) ?>"><?= htmlspecialchars($a['status']) ?></span>
+                </p>
                 <?php if ($outbid): ?>
-                    <div class="warning-badge">Outbid — raise your max</div>
+                    <p class="warning-badge">Outbid — raise your max</p>
                 <?php endif; ?>
                 <?php if ($a['result_message']): ?>
-                    <div class="hint"><?= htmlspecialchars($a['result_message']) ?></div>
+                    <p class="hint"><?= htmlspecialchars($a['result_message']) ?></p>
                 <?php endif; ?>
-            </td>
-            <td>
+                <?php if ($steps): ?>
                 <ul class="bid-steps-summary">
                 <?php foreach ($steps as $s): ?>
                     <li>
@@ -106,35 +92,39 @@ require __DIR__ . '/../includes/layout_top.php';
                     </li>
                 <?php endforeach; ?>
                 </ul>
-                <?php if (!in_array($a['status'], ['won', 'lost'], true)): ?>
-                    <a href="edit_auction.php?id=<?= (int) $a['id'] ?>">Edit bids</a>
                 <?php endif; ?>
-            </td>
-            <td>
-                <?= htmlspecialchars($currency . ' ' . number_format($estimate['total'], 2)) ?>
-                <div class="hint">
+                <?php if (!in_array($a['status'], ['won', 'lost'], true)): ?>
+                    <a class="entry-link" href="edit_auction.php?id=<?= (int) $a['id'] ?>">Edit bids</a>
+                <?php endif; ?>
+            </div>
+            <div class="entry-figures">
+                <div class="entry-price">
+                    <?= $currentPrice !== null ? htmlspecialchars($currency . ' ' . number_format($currentPrice, 2)) : '—' ?>
+                    <span class="entry-figure-label">current price</span>
+                </div>
+                <div class="entry-estimate">
+                    <?= htmlspecialchars($currency . ' ' . number_format($estimate['total'], 2)) ?>
+                    <span class="entry-figure-label">est. if you win</span>
+                </div>
+                <p class="hint">
                     highest bid <?= number_format($effectiveMaxBid, 2) ?>
                     + shipping <?= number_format($estimate['shipping'], 2) ?>
                     + buyer protection fee (est.) <?= number_format($estimate['buyer_protection_fee'], 2) ?>
                     <?php if ($estimate['gst'] > 0): ?>
                         + GST on import (est.) <?= number_format($estimate['gst'], 2) ?>
                     <?php endif; ?>
-                </div>
+                </p>
                 <?php if ($estimate['is_overseas']): ?>
-                    <div class="hint">Ships from overseas (<?= htmlspecialchars($a['item_country']) ?>)</div>
+                    <p class="hint">Ships from overseas (<?= htmlspecialchars($a['item_country']) ?>)</p>
                 <?php endif; ?>
-            </td>
-            <td class="actions-cell">
-                <form method="post" action="delete_auction.php" data-confirm="Remove this auction from your watchlist?">
+                <form method="post" action="delete_auction.php" data-confirm="Remove this auction from your auction list?" class="entry-remove">
                     <?= csrf_field() ?>
                     <input type="hidden" name="id" value="<?= (int) $a['id'] ?>">
-                    <button type="submit" class="secondary">Remove</button>
+                    <button type="submit" class="link-btn">Remove</button>
                 </form>
-            </td>
-        </tr>
+            </div>
+        </article>
     <?php endforeach; ?>
-    </tbody>
-</table>
 </div>
 <p class="hint">
     "Est. total if you win" is a best-effort estimate based on your highest configured bid (worst

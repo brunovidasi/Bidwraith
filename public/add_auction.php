@@ -45,6 +45,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $secondsSeen[] = $s['seconds_before'];
         }
+        if (!$error) {
+            $error = validate_bid_step_ordering($steps);
+        }
     }
 
     if (!$error) {
@@ -84,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             db()->commit();
 
-            set_flash('success', 'Auction added to your watchlist.');
+            set_flash('success', 'Auction added to your auction list.');
             redirect('dashboard.php');
         }
     }
@@ -109,7 +112,7 @@ require __DIR__ . '/../includes/layout_top.php';
 <form class="stacked" method="post">
     <?= csrf_field() ?>
     <label for="item_id">eBay item ID</label>
-    <input type="text" id="item_id" name="item_id" required value="<?= htmlspecialchars($_POST['item_id'] ?? '') ?>">
+    <input type="text" id="item_id" name="item_id" required placeholder="e.g. 123456789012" value="<?= htmlspecialchars($_POST['item_id'] ?? $_GET['item_id'] ?? '') ?>">
     <div class="hint">The number at the end of the listing URL, e.g. 123456789012.</div>
 
     <label>Bids (up to 5, timed before the auction ends)</label>
@@ -118,7 +121,34 @@ require __DIR__ . '/../includes/layout_top.php';
         <?= htmlspecialchars($currency) ?> 70 at 1s before (the last second) — each one only fires if you haven't
         already won at an earlier, lower bid.
     </div>
-    <?php render_bid_step_rows($repopulateSteps, $currency); ?>
+
+    <?php $initialTab = $repopulateSteps ? 'custom' : 'strategies'; ?>
+    <div class="bid-tabs" role="tablist">
+        <button type="button" class="bid-tab<?= $initialTab === 'strategies' ? ' is-active' : '' ?>" data-bid-tab="strategies" role="tab" aria-selected="<?= $initialTab === 'strategies' ? 'true' : 'false' ?>">Strategies</button>
+        <button type="button" class="bid-tab<?= $initialTab === 'custom' ? ' is-active' : '' ?>" data-bid-tab="custom" role="tab" aria-selected="<?= $initialTab === 'custom' ? 'true' : 'false' ?>">Custom</button>
+    </div>
+
+    <div class="bid-tab-panel" data-bid-panel="strategies"<?= $initialTab === 'strategies' ? '' : ' hidden' ?>>
+        <div class="strategy-cards">
+            <button type="button" class="strategy-card" data-strategy="[2]">
+                <span class="strategy-name">Last Second Strategy</span>
+                <span class="strategy-desc">1 bid &mdash; 2s before the end</span>
+            </button>
+            <button type="button" class="strategy-card" data-strategy="[5,3,2]">
+                <span class="strategy-name">3 Seconds Strategy</span>
+                <span class="strategy-desc">3 bids &mdash; 5s, 3s, and 2s before the end</span>
+            </button>
+            <button type="button" class="strategy-card" data-strategy="[1]">
+                <span class="strategy-name">High Risk Strategy</span>
+                <span class="strategy-desc">1 bid &mdash; 1s before the end</span>
+            </button>
+        </div>
+        <div class="hint">Pick a strategy to prefill the timing, then set your own max bid amount(s) on the Custom tab.</div>
+    </div>
+
+    <div class="bid-tab-panel" data-bid-panel="custom"<?= $initialTab === 'custom' ? '' : ' hidden' ?>>
+        <?php render_bid_step_rows($repopulateSteps, $currency); ?>
+    </div>
 
     <?php if ($lookupFailed): ?>
         <label for="end_time">Auction end time (since it couldn't be looked up automatically)</label>
