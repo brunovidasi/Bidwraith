@@ -168,6 +168,7 @@ class EbayClient
             'current_price' => $currentPrice !== null ? (float) $currentPrice : null,
             'shipping_cost' => $shippingCost !== null ? (float) $shippingCost : null,
             'item_country' => $data['itemLocation']['country'] ?? null,
+            'image_url' => $data['image']['imageUrl'] ?? null,
         ];
     }
 

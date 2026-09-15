@@ -1,6 +1,18 @@
 <?php
 require_once __DIR__ . '/../includes/bootstrap.php';
 
+// Public sign-up is switched off for now — the app is invite-only until this
+// flag is flipped back on. register_user() below is left intact for that.
+const REGISTRATION_OPEN = false;
+
+if (!REGISTRATION_OPEN) {
+    http_response_code(404);
+    require __DIR__ . '/../includes/layout_top.php';
+    echo '<p>Page not found.</p>';
+    require __DIR__ . '/../includes/layout_bottom.php';
+    exit;
+}
+
 if (current_user()) {
     redirect('dashboard.php');
 }

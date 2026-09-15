@@ -1,8 +1,54 @@
+function showConfirmModal(message) {
+    var overlay = document.getElementById('confirmModal');
+    if (!overlay) {
+        return Promise.resolve(true);
+    }
+    var messageEl = document.getElementById('confirmModalMessage');
+    var okBtn = document.getElementById('confirmModalOk');
+    var cancelBtn = document.getElementById('confirmModalCancel');
+
+    return new Promise(function (resolve) {
+        messageEl.textContent = message;
+        overlay.hidden = false;
+        okBtn.focus();
+
+        function cleanup(result) {
+            overlay.hidden = true;
+            okBtn.removeEventListener('click', onOk);
+            cancelBtn.removeEventListener('click', onCancel);
+            overlay.removeEventListener('click', onOverlayClick);
+            document.removeEventListener('keydown', onKeydown);
+            resolve(result);
+        }
+
+        function onOk() { cleanup(true); }
+        function onCancel() { cleanup(false); }
+        function onOverlayClick(e) {
+            if (e.target === overlay) {
+                cleanup(false);
+            }
+        }
+        function onKeydown(e) {
+            if (e.key === 'Escape') {
+                cleanup(false);
+            }
+        }
+
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+        overlay.addEventListener('click', onOverlayClick);
+        document.addEventListener('keydown', onKeydown);
+    });
+}
+
 document.querySelectorAll('form[data-confirm]').forEach(function (form) {
     form.addEventListener('submit', function (e) {
-        if (!confirm(form.dataset.confirm)) {
-            e.preventDefault();
-        }
+        e.preventDefault();
+        showConfirmModal(form.dataset.confirm).then(function (confirmed) {
+            if (confirmed) {
+                form.submit();
+            }
+        });
     });
 });
 
@@ -22,6 +68,41 @@ document.querySelectorAll('form[data-confirm]').forEach(function (form) {
             toggle.setAttribute('aria-expanded', 'false');
         });
     });
+})();
+
+(function () {
+    var timers = document.querySelectorAll('[data-countdown-end]');
+    if (!timers.length) {
+        return;
+    }
+    // Count against the server's clock so a skewed client clock doesn't shift the timer.
+    var holder = document.querySelector('[data-server-now]');
+    var offsetMs = holder ? parseInt(holder.dataset.serverNow, 10) * 1000 - Date.now() : 0;
+
+    function pad(n) {
+        return n < 10 ? '0' + n : String(n);
+    }
+
+    function tick() {
+        var now = Date.now() + offsetMs;
+        timers.forEach(function (el) {
+            var left = Math.floor((parseInt(el.dataset.countdownEnd, 10) * 1000 - now) / 1000);
+            if (left <= 0) {
+                el.textContent = 'Ended';
+                el.classList.add('is-urgent');
+                return;
+            }
+            var days = Math.floor(left / 86400);
+            var hours = Math.floor((left % 86400) / 3600);
+            var minutes = Math.floor((left % 3600) / 60);
+            var seconds = left % 60;
+            el.textContent = (days ? days + 'd ' : '') + pad(hours) + ':' + pad(minutes) + ':' + pad(seconds) + ' left';
+            el.classList.toggle('is-urgent', left < 3600);
+        });
+    }
+
+    tick();
+    setInterval(tick, 1000);
 })();
 
 function switchBidTab(form, tab) {
@@ -44,51 +125,141 @@ document.querySelectorAll('[data-bid-tab]').forEach(function (btn) {
     });
 });
 
+function applyStrategy(card) {
+    var form = card.closest('form');
+    if (!form) {
+        return;
+    }
+    var seconds = JSON.parse(card.dataset.strategy);
+    var rows = form.querySelectorAll('.bid-step-row');
+    rows.forEach(function (row, i) {
+        var idInput = row.querySelector('input[name="step_id[]"]');
+        var secondsInput = row.querySelector('input[name="step_seconds[]"]');
+        var maxBidInput = row.querySelector('input[name="step_max_bid[]"]');
+        if (idInput) {
+            idInput.value = '';
+        }
+        if (i < seconds.length) {
+            if (secondsInput) {
+                secondsInput.value = seconds[i];
+            }
+            if (maxBidInput) {
+                maxBidInput.value = '';
+            }
+            row.hidden = false;
+        } else {
+            if (secondsInput) {
+                secondsInput.value = '';
+            }
+            if (maxBidInput) {
+                maxBidInput.value = '';
+            }
+            row.hidden = true;
+        }
+    });
+
+    var addBtn = form.querySelector('[data-add-step]');
+    if (addBtn) {
+        addBtn.hidden = seconds.length >= 5;
+    }
+
+    var notice = document.getElementById('anywayModeNotice');
+    if (notice) {
+        notice.hidden = !card.classList.contains('strategy-card-danger');
+    }
+
+    showBidStepError(form, null);
+    clearAllFieldErrors(form);
+    switchBidTab(form, 'custom');
+
+    var firstMaxBid = form.querySelector('.bid-step-row:not([hidden]) input[name="step_max_bid[]"]');
+    if (firstMaxBid) {
+        firstMaxBid.focus();
+    }
+}
+
 document.querySelectorAll('[data-strategy]').forEach(function (card) {
     card.addEventListener('click', function () {
-        var form = card.closest('form');
-        if (!form) {
+        var confirmMessage = card.dataset.strategyConfirm;
+        if (confirmMessage) {
+            showConfirmModal(confirmMessage).then(function (confirmed) {
+                if (confirmed) {
+                    applyStrategy(card);
+                }
+            });
             return;
         }
-        var seconds = JSON.parse(card.dataset.strategy);
-        var rows = form.querySelectorAll('.bid-step-row');
-        rows.forEach(function (row, i) {
-            var idInput = row.querySelector('input[name="step_id[]"]');
-            var secondsInput = row.querySelector('input[name="step_seconds[]"]');
-            var maxBidInput = row.querySelector('input[name="step_max_bid[]"]');
-            if (idInput) {
-                idInput.value = '';
-            }
-            if (i < seconds.length) {
-                if (secondsInput) {
-                    secondsInput.value = seconds[i];
-                }
-                if (maxBidInput) {
-                    maxBidInput.value = '';
-                }
-                row.hidden = false;
-            } else {
-                if (secondsInput) {
-                    secondsInput.value = '';
-                }
-                if (maxBidInput) {
-                    maxBidInput.value = '';
-                }
-                row.hidden = true;
-            }
-        });
+        applyStrategy(card);
+    });
+});
 
-        var addBtn = form.querySelector('[data-add-step]');
-        if (addBtn) {
-            addBtn.hidden = seconds.length >= 5;
+function setFieldError(input, message) {
+    var el = input.parentNode.querySelector('[data-field-error]');
+    if (!el) {
+        return;
+    }
+    el.textContent = message || '';
+    input.classList.toggle('has-error', !!message);
+}
+
+function visibleBidStepRows(form) {
+    return Array.prototype.filter.call(form.querySelectorAll('.bid-step-row'), function (row) {
+        return !row.hidden;
+    });
+}
+
+/**
+ * Live feedback as the user tabs between bid steps: each step is expected to fire
+ * closer to the auction's end than the one before it, so its seconds-before-end
+ * must be lower and its max bid must be equal or higher than the previous step's
+ * (the same rule the server enforces on submit, checked here row-by-row against
+ * the step directly above it since that's how the form is filled in).
+ */
+function revalidateStepOrder(form) {
+    var rows = visibleBidStepRows(form);
+    rows.forEach(function (row, i) {
+        var secondsInput = row.querySelector('input[name="step_seconds[]"]');
+        var maxBidInput = row.querySelector('input[name="step_max_bid[]"]');
+        if (!secondsInput || !maxBidInput) {
+            return;
+        }
+        if (i === 0) {
+            setFieldError(secondsInput, null);
+            setFieldError(maxBidInput, null);
+            return;
         }
 
-        showBidStepError(form, null);
-        switchBidTab(form, 'custom');
+        var prevRow = rows[i - 1];
+        var prevSeconds = parseInt(prevRow.querySelector('input[name="step_seconds[]"]').value, 10);
+        var prevMaxBid = parseFloat(prevRow.querySelector('input[name="step_max_bid[]"]').value);
+        var seconds = parseInt(secondsInput.value, 10);
+        var maxBid = parseFloat(maxBidInput.value);
 
-        var firstMaxBid = form.querySelector('.bid-step-row:not([hidden]) input[name="step_max_bid[]"]');
-        if (firstMaxBid) {
-            firstMaxBid.focus();
+        if (!isNaN(seconds) && !isNaN(prevSeconds) && seconds >= prevSeconds) {
+            setFieldError(secondsInput, 'Must be fewer seconds before the end than step ' + i + ' (' + prevSeconds + 's).');
+        } else {
+            setFieldError(secondsInput, null);
+        }
+
+        if (!isNaN(maxBid) && !isNaN(prevMaxBid) && maxBid < prevMaxBid) {
+            setFieldError(maxBidInput, 'Can\'t be lower than step ' + i + '\'s max bid (' + prevMaxBid + ').');
+        } else {
+            setFieldError(maxBidInput, null);
+        }
+    });
+}
+
+function clearAllFieldErrors(form) {
+    form.querySelectorAll('.bid-step-row input[type=number]').forEach(function (input) {
+        setFieldError(input, null);
+    });
+}
+
+document.querySelectorAll('.bid-step-row input[name="step_seconds[]"], .bid-step-row input[name="step_max_bid[]"]').forEach(function (input) {
+    input.addEventListener('blur', function () {
+        var form = input.closest('form');
+        if (form) {
+            revalidateStepOrder(form);
         }
     });
 });

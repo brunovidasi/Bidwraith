@@ -3,9 +3,24 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 
 $user = require_login();
 
-$stmt = db()->prepare('SELECT * FROM watched_auctions WHERE user_id = ? ORDER BY end_time IS NULL, end_time ASC');
-$stmt->execute([$user['id']]);
+$now = date('Y-m-d H:i:s');
+// Auctions stay in the detailed list for a day after they close so the result is still
+// visible up top; only after that grace period do they drop into the past-auctions table.
+$pastCutoff = date('Y-m-d H:i:s', strtotime('-1 day'));
+
+$stmt = db()->prepare('SELECT * FROM watched_auctions WHERE user_id = ? AND (end_time IS NULL OR end_time >= ?) ORDER BY end_time IS NULL, end_time ASC');
+$stmt->execute([$user['id'], $pastCutoff]);
 $auctions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$pastAllowedSorts = ['item', 'end', 'status', 'result', 'price', 'topbid'];
+[$pastSortKey, $pastSortDir] = resolve_sort(get_param('psort'), get_param('pdir'), $pastAllowedSorts, 'end', 'desc');
+$pastStmt = db()->prepare('
+    SELECT wa.* FROM watched_auctions wa
+    WHERE wa.user_id = ? AND wa.end_time IS NOT NULL AND wa.end_time < ?
+    ORDER BY ' . watched_auction_order_sql($pastSortKey, $pastSortDir) . ', wa.id DESC
+');
+$pastStmt->execute([$user['id'], $pastCutoff]);
+$pastRows = $pastStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $stmt2 = db()->prepare('SELECT 1 FROM ebay_accounts WHERE user_id = ?');
 $stmt2->execute([$user['id']]);
@@ -21,14 +36,16 @@ foreach ($auctions as &$a) {
     try {
         $lookup = $client->getItemByLegacyId($a['item_id']);
         if ($lookup) {
+            $imageUrl = $lookup['image_url'] ?? $a['image_url'];
             db()->prepare('
                 UPDATE watched_auctions
-                SET current_price = ?, shipping_cost = ?, item_country = ?, price_checked_at = datetime(\'now\')
+                SET current_price = ?, shipping_cost = ?, item_country = ?, image_url = ?, price_checked_at = datetime(\'now\')
                 WHERE id = ?
-            ')->execute([$lookup['current_price'], $lookup['shipping_cost'], $lookup['item_country'], $a['id']]);
+            ')->execute([$lookup['current_price'], $lookup['shipping_cost'], $lookup['item_country'], $imageUrl, $a['id']]);
             $a['current_price'] = $lookup['current_price'];
             $a['shipping_cost'] = $lookup['shipping_cost'];
             $a['item_country'] = $lookup['item_country'];
+            $a['image_url'] = $imageUrl;
         }
     } catch (Throwable $e) {
         // Keep showing the last-known values.
@@ -38,12 +55,21 @@ unset($a);
 
 $stepsStmt = db()->prepare('SELECT * FROM bid_steps WHERE watched_auction_id = ? ORDER BY seconds_before DESC');
 
+foreach ($pastRows as &$pastRow) {
+    $stepsStmt->execute([$pastRow['id']]);
+    $pastRow['steps'] = $stepsStmt->fetchAll(PDO::FETCH_ASSOC);
+}
+unset($pastRow);
+
 $pageTitle = 'Auction list';
 $currency = ebay_config()['currency'];
 $homeCountry = marketplace_country_code(ebay_config()['marketplace_id']);
 require __DIR__ . '/../includes/layout_top.php';
 ?>
-<h1>Your auction list</h1>
+<div class="page-header">
+    <h1>Your auction list</h1>
+    <a class="btn" href="add_auction.php">+ Add auction</a>
+</div>
 
 <?php if (!$hasEbayAccount): ?>
     <div class="flash flash-error">
@@ -52,12 +78,10 @@ require __DIR__ . '/../includes/layout_top.php';
     </div>
 <?php endif; ?>
 
-<a class="btn" href="add_auction.php">+ Add auction</a>
-
 <?php if (empty($auctions)): ?>
-    <p class="hint">No auctions yet. Add one by eBay item ID and set your max bid.</p>
+    <p class="hint"><?= $pastRows ? 'No auctions still running.' : 'No auctions yet. Add one by eBay item ID and set your max bid.' ?></p>
 <?php else: ?>
-<div class="entries">
+<div class="entries" data-server-now="<?= time() ?>">
     <?php foreach ($auctions as $a):
         $stepsStmt->execute([$a['id']]);
         $steps = $stepsStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -66,10 +90,20 @@ require __DIR__ . '/../includes/layout_top.php';
         $currentPrice = $a['current_price'];
         $outbid = $currentPrice !== null && in_array($a['status'], ['pending', 'bid_placed'], true) && (float) $currentPrice >= $effectiveMaxBid;
         $estimate = estimate_landed_cost($effectiveMaxBid, $a['shipping_cost'], $a['item_country'], $homeCountry);
+        $editable = !in_array($a['status'], ['won', 'lost'], true);
+        $editUrl = 'edit_auction.php?id=' . (int) $a['id'];
+        $titleText = htmlspecialchars($a['title'] ?? '(unknown title)');
     ?>
         <article class="entry">
+            <?php if (!empty($a['image_url'])): ?>
+                <?php if ($editable): ?>
+                    <a href="<?= $editUrl ?>"><img class="entry-thumb" src="<?= htmlspecialchars($a['image_url']) ?>" alt=""></a>
+                <?php else: ?>
+                    <img class="entry-thumb" src="<?= htmlspecialchars($a['image_url']) ?>" alt="">
+                <?php endif; ?>
+            <?php endif; ?>
             <div class="entry-main">
-                <h3 class="entry-title"><?= htmlspecialchars($a['title'] ?? '(unknown title)') ?></h3>
+                <h3 class="entry-title"><?= $editable ? '<a href="' . $editUrl . '">' . $titleText . '</a>' : $titleText ?></h3>
                 <p class="entry-meta">
                     Item <?= htmlspecialchars($a['item_id']) ?>
                     <span class="sep">·</span>
@@ -77,6 +111,11 @@ require __DIR__ . '/../includes/layout_top.php';
                     <span class="sep">·</span>
                     <span class="status-<?= htmlspecialchars($a['status']) ?>"><?= htmlspecialchars($a['status']) ?></span>
                 </p>
+                <?php if ($a['end_time'] !== null): ?>
+                    <p class="countdown-row">
+                        <span class="countdown" data-countdown-end="<?= (int) strtotime($a['end_time']) ?>"></span>
+                    </p>
+                <?php endif; ?>
                 <?php if ($outbid): ?>
                     <p class="warning-badge">Outbid — raise your max</p>
                 <?php endif; ?>
@@ -93,9 +132,7 @@ require __DIR__ . '/../includes/layout_top.php';
                 <?php endforeach; ?>
                 </ul>
                 <?php endif; ?>
-                <?php if (!in_array($a['status'], ['won', 'lost'], true)): ?>
-                    <a class="entry-link" href="edit_auction.php?id=<?= (int) $a['id'] ?>">Edit bids</a>
-                <?php endif; ?>
+                <a class="entry-link entry-view-link" href="<?= htmlspecialchars(ebay_item_view_url($a['item_id'], ebay_config()['marketplace_id'])) ?>" target="_blank" rel="noopener">View on eBay</a>
             </div>
             <div class="entry-figures">
                 <div class="entry-price">
@@ -117,11 +154,16 @@ require __DIR__ . '/../includes/layout_top.php';
                 <?php if ($estimate['is_overseas']): ?>
                     <p class="hint">Ships from overseas (<?= htmlspecialchars($a['item_country']) ?>)</p>
                 <?php endif; ?>
-                <form method="post" action="delete_auction.php" data-confirm="Remove this auction from your auction list?" class="entry-remove">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="id" value="<?= (int) $a['id'] ?>">
-                    <button type="submit" class="link-btn">Remove</button>
-                </form>
+                <div class="entry-actions">
+                    <?php if ($editable): ?>
+                        <a class="entry-link" href="<?= $editUrl ?>">Edit bids</a>
+                    <?php endif; ?>
+                    <form method="post" action="delete_auction.php" data-confirm="Remove this auction from your auction list?">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="id" value="<?= (int) $a['id'] ?>">
+                        <button type="submit" class="link-btn">Remove</button>
+                    </form>
+                </div>
             </div>
         </article>
     <?php endforeach; ?>
@@ -133,6 +175,22 @@ require __DIR__ . '/../includes/layout_top.php';
     low-value imports where the item ships from outside <?= htmlspecialchars($homeCountry) ?> and
     eBay hasn't already included it in the price.
 </p>
+<?php endif; ?>
+
+<?php if ($pastRows): ?>
+    <h2 class="past-heading" id="past-auctions">Past auctions (<?= count($pastRows) ?>)</h2>
+    <?php
+    $sortKey = $pastSortKey;
+    $sortDir = $pastSortDir;
+    $sortParam = 'psort';
+    $dirParam = 'pdir';
+    $anchor = 'past-auctions';
+    require __DIR__ . '/../includes/past_auctions_table.php';
+    ?>
+    <p class="hint">
+        "Bids" shows what the cron job did as each auction closed. "Never fired" means the
+        scheduled bid never ran at all.
+    </p>
 <?php endif; ?>
 
 <script src="assets/js/app.js"></script>

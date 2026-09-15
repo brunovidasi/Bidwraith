@@ -32,7 +32,8 @@ function db(): PDO
 function run_migrations(PDO $db): void
 {
     $columns = [
-        'watched_auctions' => ['current_price' => 'REAL', 'shipping_cost' => 'REAL', 'item_country' => 'TEXT', 'price_checked_at' => 'TEXT'],
+        'watched_auctions' => ['current_price' => 'REAL', 'shipping_cost' => 'REAL', 'item_country' => 'TEXT', 'price_checked_at' => 'TEXT', 'image_url' => 'TEXT'],
+        'users' => ['is_admin' => 'INTEGER NOT NULL DEFAULT 0', 'is_active' => 'INTEGER NOT NULL DEFAULT 1'],
     ];
 
     foreach ($columns as $table => $cols) {
@@ -45,6 +46,17 @@ function run_migrations(PDO $db): void
     }
 
     migrate_single_bid_to_steps($db);
+    grant_owner_admin($db);
+}
+
+/**
+ * The app's owner (identified by email) is always an active admin, regardless of
+ * how the users table was seeded — reapplied on every request so the owner can't
+ * end up locked out of their own admin dashboard.
+ */
+function grant_owner_admin(PDO $db): void
+{
+    $db->prepare('UPDATE users SET is_admin = 1, is_active = 1 WHERE email = ?')->execute(['brunovidasi@gmail.com']);
 }
 
 /**

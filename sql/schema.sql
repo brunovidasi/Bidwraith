@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS users (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     email         TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
+    is_admin      INTEGER NOT NULL DEFAULT 0,
+    is_active     INTEGER NOT NULL DEFAULT 1,
     created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -37,6 +39,7 @@ CREATE TABLE IF NOT EXISTS watched_auctions (
     shipping_cost        REAL,
     item_country         TEXT,
     price_checked_at     TEXT,
+    image_url            TEXT,
     created_at           TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

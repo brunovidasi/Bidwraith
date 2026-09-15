@@ -9,8 +9,53 @@ $account = $stmt->fetch(PDO::FETCH_ASSOC);
 
 $items = [];
 $error = null;
+$demo = isset($_GET['demo']);
 
-if ($account) {
+if ($demo) {
+    // Sample data for previewing the layout only — not real eBay items. Visit with ?demo=1.
+    $items = [
+        [
+            'item_id' => '203945671201',
+            'title' => 'Sony WH-1000XM5 Wireless Noise Cancelling Headphones - Black',
+            'end_time' => date('Y-m-d H:i:s', strtotime('+1 day 3 hours')),
+            'view_url' => 'https://www.ebay.com.au/itm/203945671201',
+            'gallery_url' => 'https://placehold.co/120x120?text=Headphones',
+            'current_price' => 214.50,
+            'currency' => 'AUD',
+            'bid_count' => 8,
+        ],
+        [
+            'item_id' => '186372940458',
+            'title' => 'Vintage Omega Seamaster Automatic Watch, 1970s',
+            'end_time' => date('Y-m-d H:i:s', strtotime('+5 hours 20 minutes')),
+            'view_url' => 'https://www.ebay.com.au/itm/186372940458',
+            'gallery_url' => 'https://placehold.co/120x120?text=Watch',
+            'current_price' => 1325.00,
+            'currency' => 'AUD',
+            'bid_count' => 23,
+        ],
+        [
+            'item_id' => '297581103366',
+            'title' => 'LEGO Icons 10294 Titanic Building Set (New, Sealed)',
+            'end_time' => date('Y-m-d H:i:s', strtotime('+2 days 11 hours')),
+            'view_url' => 'https://www.ebay.com.au/itm/297581103366',
+            'gallery_url' => 'https://placehold.co/120x120?text=LEGO',
+            'current_price' => 489.00,
+            'currency' => 'AUD',
+            'bid_count' => 3,
+        ],
+        [
+            'item_id' => '154029887712',
+            'title' => 'Canon EF 50mm f/1.8 STM Lens',
+            'end_time' => date('Y-m-d H:i:s', strtotime('+40 minutes')),
+            'view_url' => 'https://www.ebay.com.au/itm/154029887712',
+            'gallery_url' => '',
+            'current_price' => 96.00,
+            'currency' => 'AUD',
+            'bid_count' => null,
+        ],
+    ];
+} elseif ($account) {
     try {
         $client = new EbayClient();
         $items = $client->getWatchList($account['auth_token']);
@@ -25,7 +70,7 @@ require __DIR__ . '/../includes/layout_top.php';
 <h1>Your eBay watchlist</h1>
 <p class="hint">Items you're watching on eBay itself. Add one to your <a href="dashboard.php">auction list</a> to schedule bids for it.</p>
 
-<?php if (!$account): ?>
+<?php if (!$account && !$demo): ?>
     <div class="flash flash-error">
         You haven't connected an eBay account yet, so your watchlist can't be loaded.
         <a href="connect_ebay.php">Connect it now</a>.

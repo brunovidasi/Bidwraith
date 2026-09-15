@@ -9,10 +9,10 @@ $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
-    if (attempt_login($_POST['email'] ?? '', $_POST['password'] ?? '')) {
+    $error = attempt_login($_POST['email'] ?? '', $_POST['password'] ?? '');
+    if ($error === null) {
         redirect('dashboard.php');
     }
-    $error = 'Invalid email or password.';
 }
 
 $pageTitle = 'Log in';
@@ -31,6 +31,5 @@ require __DIR__ . '/../includes/layout_top.php';
 
         <button type="submit">Log in</button>
     </form>
-    <div class="switch">No account yet? <a href="register.php">Create one</a></div>
 </div>
 <?php require __DIR__ . '/../includes/layout_bottom.php'; ?>

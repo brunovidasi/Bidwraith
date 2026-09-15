@@ -72,12 +72,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             db()->beginTransaction();
             $stmt = db()->prepare('
-                INSERT INTO watched_auctions (user_id, item_id, title, end_time, current_price, shipping_cost, item_country, price_checked_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, datetime(\'now\'))
+                INSERT INTO watched_auctions (user_id, item_id, title, end_time, current_price, shipping_cost, item_country, image_url, price_checked_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime(\'now\'))
             ');
             $stmt->execute([
                 $user['id'], $itemId, $title, $endTime,
                 $lookup['current_price'] ?? null, $lookup['shipping_cost'] ?? null, $lookup['item_country'] ?? null,
+                $lookup['image_url'] ?? null,
             ]);
             $auctionId = (int) db()->lastInsertId();
 
@@ -125,7 +126,7 @@ require __DIR__ . '/../includes/layout_top.php';
     <?php $initialTab = $repopulateSteps ? 'custom' : 'strategies'; ?>
     <div class="bid-tabs" role="tablist">
         <button type="button" class="bid-tab<?= $initialTab === 'strategies' ? ' is-active' : '' ?>" data-bid-tab="strategies" role="tab" aria-selected="<?= $initialTab === 'strategies' ? 'true' : 'false' ?>">Strategies</button>
-        <button type="button" class="bid-tab<?= $initialTab === 'custom' ? ' is-active' : '' ?>" data-bid-tab="custom" role="tab" aria-selected="<?= $initialTab === 'custom' ? 'true' : 'false' ?>">Custom</button>
+        <button type="button" class="bid-tab<?= $initialTab === 'custom' ? ' is-active' : '' ?>" data-bid-tab="custom" role="tab" aria-selected="<?= $initialTab === 'custom' ? 'true' : 'false' ?>">Steps</button>
     </div>
 
     <div class="bid-tab-panel" data-bid-panel="strategies"<?= $initialTab === 'strategies' ? '' : ' hidden' ?>>
@@ -141,12 +142,22 @@ require __DIR__ . '/../includes/layout_top.php';
             <button type="button" class="strategy-card" data-strategy="[1]">
                 <span class="strategy-name">High Risk Strategy</span>
                 <span class="strategy-desc">1 bid &mdash; 1s before the end</span>
+                <span class="strategy-warning">&#9888; If eBay responds slowly, there may not be enough time left for the bid to register &mdash; you could lose the auction.</span>
+            </button>
+            <button type="button" class="strategy-card strategy-card-danger" data-strategy="[2]" data-strategy-confirm="eBay will automatically keep raising your bid above whoever else bids &mdash; all the way up to the maximum you set, no matter how far past the item's real value that goes. It will never bid more than that number, but it WILL go that high if that's what it takes to win. Only continue if you truly want this item at any price up to your maximum.">
+                <span class="strategy-name">I Want The Item Anyway</span>
+                <span class="strategy-desc">1 bid &mdash; 2s before the end, at whatever maximum you set</span>
+                <span class="strategy-warning">&#9888; Dangerous: this sets your ceiling, not a fixed price. eBay's proxy bidding keeps outbidding everyone else automatically, all the way up to the maximum you enter &mdash; only set a number you're genuinely willing to pay.</span>
             </button>
         </div>
-        <div class="hint">Pick a strategy to prefill the timing, then set your own max bid amount(s) on the Custom tab.</div>
+        <div class="hint">Pick a strategy to prefill the timing, then set your own max bid amount(s) on the Steps tab.</div>
     </div>
 
     <div class="bid-tab-panel" data-bid-panel="custom"<?= $initialTab === 'custom' ? '' : ' hidden' ?>>
+        <div class="flash flash-error anyway-mode-notice" id="anywayModeNotice" hidden>
+            You're set to bid whatever it takes, no matter the price. The amount below is your absolute maximum &mdash;
+            eBay will bid up to it automatically, but never more.
+        </div>
         <?php render_bid_step_rows($repopulateSteps, $currency); ?>
     </div>
 

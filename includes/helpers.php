@@ -1,5 +1,91 @@
 <?php
 
+/**
+ * Builds the current request's URL with some query params overridden ('' or null
+ * removes a param). Used by sortable table headers and pagers, which both need to
+ * change one or two params while preserving everything else already in the URL.
+ */
+function url_with(array $overrides): string
+{
+    $params = array_filter(array_merge($_GET, $overrides), fn ($v) => $v !== '' && $v !== null);
+    return basename($_SERVER['SCRIPT_NAME']) . ($params ? '?' . http_build_query($params) : '');
+}
+
+/** Query params are user-controlled, so anything non-scalar (?q[]=x) becomes an empty string. */
+function get_param(string $name): string
+{
+    $value = $_GET[$name] ?? '';
+    return is_scalar($value) ? (string) $value : '';
+}
+
+/**
+ * Resolves a (key, direction) sort pair from raw GET values, falling back to the
+ * given defaults when unset or when the key isn't one of $allowedKeys.
+ */
+function resolve_sort(string $rawKey, string $rawDir, array $allowedKeys, string $defaultKey, string $defaultDir): array
+{
+    $key = in_array($rawKey, $allowedKeys, true) ? $rawKey : $defaultKey;
+    $dir = $rawDir === 'asc' ? 'asc' : ($rawDir === 'desc' ? 'desc' : $defaultDir);
+    return [$key, $dir];
+}
+
+/**
+ * Renders a sortable <th>: a link that sorts by this column (flipping direction if
+ * it's already the active one) and shows an arrow for the active direction, or a
+ * faded neutral arrow when this column isn't the active sort. $resetParams lists
+ * other params (typically a pager's page number) to clear, since a page you were on
+ * may no longer make sense once the sort changes. $anchor, when given (an element id,
+ * no leading '#'), is appended to the link so the reloaded page scrolls straight back
+ * to that table instead of landing at the top.
+ */
+function sortable_th(string $label, string $key, string $activeKey, string $activeDir, string $sortParam, string $dirParam, array $resetParams = [], string $class = '', string $anchor = ''): string
+{
+    $isActive = $key === $activeKey;
+    $nextDir = $isActive && $activeDir === 'asc' ? 'desc' : 'asc';
+
+    $overrides = [$sortParam => $key, $dirParam => $nextDir];
+    foreach ($resetParams as $param) {
+        $overrides[$param] = null;
+    }
+    $url = url_with($overrides) . ($anchor !== '' ? '#' . $anchor : '');
+
+    $arrow = $isActive
+        ? '<span class="sort-arrow">' . ($activeDir === 'asc' ? '&#9650;' : '&#9660;') . '</span>'
+        : '<span class="sort-arrow-inactive">&#8645;</span>';
+
+    $thClass = trim($class . ' sortable-th' . ($isActive ? ' sort-active' : ''));
+
+    return '<th class="' . htmlspecialchars($thClass) . '">'
+        . '<a href="' . htmlspecialchars($url) . '">' . htmlspecialchars($label) . ' ' . $arrow . '</a>'
+        . '</th>';
+}
+
+/**
+ * ORDER BY expression for a watched_auctions listing sorted by $key (one of item,
+ * owner, end, status, result, price, topbid), shared by the admin dashboard's
+ * auction tables and the past-auctions table. Assumes the query aliases
+ * watched_auctions as "wa" (and, for 'owner', joins users as "u").
+ */
+function watched_auction_order_sql(string $key, string $dir): string
+{
+    $dir = $dir === 'asc' ? 'ASC' : 'DESC';
+    $topBid = '(SELECT MAX(max_bid) FROM bid_steps WHERE bid_steps.watched_auction_id = wa.id)';
+    // Matches the past-auctions table's Result column, which collapses anything that
+    // isn't settled (still pending/bid_placed/failed after the end time) into "unknown"
+    // — sorting by the raw status would scatter those rows instead of grouping them.
+    $result = "CASE WHEN wa.status IN ('won', 'lost') THEN wa.status ELSE 'unknown' END";
+
+    return match ($key) {
+        'item'   => "wa.title COLLATE NOCASE $dir",
+        'owner'  => "u.email COLLATE NOCASE $dir",
+        'status' => "wa.status $dir",
+        'result' => "$result $dir",
+        'price'  => "wa.current_price IS NULL, wa.current_price $dir",
+        'topbid' => "$topBid IS NULL, $topBid $dir",
+        default  => "wa.end_time IS NULL, wa.end_time $dir",
+    };
+}
+
 function set_flash(string $type, string $message): void
 {
     $_SESSION['flash'] = ['type' => $type, 'message' => $message];
@@ -16,6 +102,39 @@ function marketplace_country_code(string $marketplaceId): string
     // e.g. 'EBAY_AU' -> 'AU'
     $parts = explode('_', $marketplaceId);
     return end($parts);
+}
+
+/**
+ * Public listing page for an item, so users can jump to it on eBay itself. Domain follows
+ * the configured marketplace (e.g. EBAY_AU -> ebay.com.au); marketplaces not in the map
+ * fall back to ebay.com, which eBay still resolves to the right listing.
+ */
+function ebay_item_view_url(string $itemId, string $marketplaceId): string
+{
+    $domains = [
+        'AU' => 'ebay.com.au',
+        'US' => 'ebay.com',
+        'GB' => 'ebay.co.uk',
+        'DE' => 'ebay.de',
+        'FR' => 'ebay.fr',
+        'IT' => 'ebay.it',
+        'ES' => 'ebay.es',
+        'CA' => 'ebay.ca',
+        'NL' => 'ebay.nl',
+        'AT' => 'ebay.at',
+        'CH' => 'ebay.ch',
+        'IE' => 'ebay.ie',
+        'BE' => 'ebay.be',
+        'PL' => 'ebay.pl',
+        'HK' => 'ebay.com.hk',
+        'MY' => 'ebay.com.my',
+        'PH' => 'ebay.ph',
+        'SG' => 'ebay.com.sg',
+        'TH' => 'ebay.co.th',
+        'TW' => 'ebay.com.tw',
+    ];
+    $domain = $domains[marketplace_country_code($marketplaceId)] ?? 'ebay.com';
+    return 'https://www.' . $domain . '/itm/' . rawurlencode($itemId);
 }
 
 /**
@@ -40,6 +159,63 @@ function validate_bid_step_ordering(array $steps): ?string
     }
 
     return null;
+}
+
+/**
+ * What actually happened to an auction's scheduled bids, for auctions that have ended.
+ * A step only leaves 'pending' when the cron reaches it (see cron/snipe.php), so steps
+ * still pending after the close mean the cron never ran for them — worth flagging
+ * loudly, since it's the difference between losing an auction and never bidding at all.
+ * Steps left unfired because the auction was already marked won/lost are expected.
+ *
+ * $steps: bid_steps rows. Returns ['label', 'tone', 'detail'].
+ */
+function bid_outcome_summary(array $steps, ?string $auctionStatus = null): array
+{
+    if (!$steps) {
+        return ['label' => 'No bids scheduled', 'tone' => 'muted', 'detail' => ''];
+    }
+
+    $placed = $failed = $unfired = 0;
+    $lastMessage = '';
+
+    usort($steps, fn ($a, $b) => $b['seconds_before'] <=> $a['seconds_before']);
+    foreach ($steps as $step) {
+        match ($step['status']) {
+            'bid_placed' => $placed++,
+            'failed' => $failed++,
+            default => $unfired++,
+        };
+        if ($step['status'] !== 'pending' && !empty($step['result_message'])) {
+            $lastMessage = $step['result_message'];
+        }
+    }
+
+    $parts = [];
+    if ($placed) { $parts[] = "$placed placed"; }
+    if ($failed) { $parts[] = "$failed failed"; }
+    if ($unfired) { $parts[] = "$unfired never fired"; }
+    $detail = implode(', ', $parts);
+    if ($lastMessage !== '') {
+        $detail .= ' · ' . $lastMessage;
+    }
+
+    if ($placed === 0 && $failed === 0) {
+        $settled = in_array($auctionStatus, ['won', 'lost'], true);
+        return [
+            'label' => 'Never fired',
+            'tone' => $settled ? 'muted' : 'danger',
+            'detail' => $settled ? $detail : $detail . ' — check that the cron job is running',
+        ];
+    }
+    if ($placed === 0) {
+        return ['label' => 'Bid failed', 'tone' => 'danger', 'detail' => $detail];
+    }
+    if ($failed > 0) {
+        return ['label' => 'Partly placed', 'tone' => 'warn', 'detail' => $detail];
+    }
+
+    return ['label' => 'Bid placed', 'tone' => 'ok', 'detail' => $detail];
 }
 
 /**

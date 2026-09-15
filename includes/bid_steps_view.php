@@ -26,6 +26,7 @@ function render_bid_step_rows(array $steps, string $currency, bool $allowAdd = t
                        placeholder="e.g. 5"
                        value="<?= htmlspecialchars((string) $step['seconds_before']) ?>"
                        <?= $readonly ? 'readonly' : '' ?>>
+                <div class="field-error" data-field-error></div>
             </div>
             <div class="bid-step-field">
                 <label for="step_max_bid_<?= $i ?>">Max bid (<?= htmlspecialchars($currency) ?>)</label>
@@ -33,6 +34,7 @@ function render_bid_step_rows(array $steps, string $currency, bool $allowAdd = t
                        placeholder="e.g. 55.00"
                        value="<?= htmlspecialchars((string) $step['max_bid']) ?>"
                        <?= $readonly ? 'readonly' : '' ?>>
+                <div class="field-error" data-field-error></div>
             </div>
             <?php if ($step['status']): ?>
                 <span class="status-<?= htmlspecialchars($step['status']) ?>"><?= htmlspecialchars($step['status']) ?></span>

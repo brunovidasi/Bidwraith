@@ -52,6 +52,9 @@ $currentPage = basename($_SERVER['SCRIPT_NAME']);
                     <a href="add_auction.php" class="<?= $currentPage === 'add_auction.php' ? 'active' : '' ?>">+ Add auction</a>
                     <a href="watchlist.php" class="<?= $currentPage === 'watchlist.php' ? 'active' : '' ?>">Watchlist</a>
                     <a href="connect_ebay.php" class="<?= $currentPage === 'connect_ebay.php' ? 'active' : '' ?>">eBay account</a>
+                    <?php if (!empty($user['is_admin'])): ?>
+                        <a href="admin.php" class="<?= $currentPage === 'admin.php' ? 'active' : '' ?>">Admin</a>
+                    <?php endif; ?>
                 </div>
                 <div class="nav-account">
                     <span class="user-email"><?= htmlspecialchars($user['email']) ?></span>
@@ -61,7 +64,7 @@ $currentPage = basename($_SERVER['SCRIPT_NAME']);
         </nav>
     <?php endif; ?>
 </header>
-<main class="container">
+<main class="container<?= !empty($wideLayout) ? ' container-wide' : '' ?>">
 <?php if (!empty($_SESSION['flash'])): ?>
     <div class="flash flash-<?= htmlspecialchars($_SESSION['flash']['type']) ?>">
         <?= htmlspecialchars($_SESSION['flash']['message']) ?>
