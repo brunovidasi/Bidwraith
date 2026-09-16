@@ -1,11 +1,10 @@
 <?php
 require_once __DIR__ . '/../includes/bootstrap.php';
 
-// Public sign-up is switched off for now — the app is invite-only until this
-// flag is flipped back on. register_user() below is left intact for that.
-const REGISTRATION_OPEN = false;
-
-if (!REGISTRATION_OPEN) {
+// Public sign-up is controlled per environment by 'allow_registration' in config:
+// open in development, closed in production so a live, money-spending app doesn't
+// carry an open sign-up form. register_user() below is left intact either way.
+if (!registration_allowed()) {
     http_response_code(404);
     require __DIR__ . '/../includes/layout_top.php';
     echo '<p>Page not found.</p>';

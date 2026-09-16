@@ -6,10 +6,11 @@ require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/csrf.php';
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/bid_steps_view.php';
+require_once __DIR__ . '/auction_timeline.php';
 require_once __DIR__ . '/EbayClient.php';
+require_once __DIR__ . '/runtime.php';
 
-date_default_timezone_set(app_config()['app']['timezone']);
+date_default_timezone_set(app_timezone());
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+configure_error_reporting();
+start_app_session();

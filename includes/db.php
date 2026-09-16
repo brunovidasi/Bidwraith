@@ -5,8 +5,16 @@ function db(): PDO
     static $db = null;
 
     if ($db === null) {
-        $dbPath = __DIR__ . '/../data/app.sqlite';
+        $dbPath = db_path();
         $isNew = !file_exists($dbPath);
+
+        // The data directory lives outside the deployed tree in production, so it
+        // won't exist until the first request after a fresh deploy.
+        $dir = dirname($dbPath);
+        if (!is_dir($dir) && !@mkdir($dir, 0750, true) && !is_dir($dir)) {
+            http_response_code(500);
+            die('Data directory is not writable: ' . $dir);
+        }
 
         $db = new PDO('sqlite:' . $dbPath);
         $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
@@ -52,11 +60,17 @@ function run_migrations(PDO $db): void
 /**
  * The app's owner (identified by email) is always an active admin, regardless of
  * how the users table was seeded — reapplied on every request so the owner can't
- * end up locked out of their own admin dashboard.
+ * end up locked out of their own admin dashboard. The address comes from config,
+ * which lives outside the repo, so a personal email isn't published publicly.
  */
 function grant_owner_admin(PDO $db): void
 {
-    $db->prepare('UPDATE users SET is_admin = 1, is_active = 1 WHERE email = ?')->execute(['brunovidasi@gmail.com']);
+    $owner = owner_email();
+    if ($owner === null) {
+        return;
+    }
+
+    $db->prepare('UPDATE users SET is_admin = 1, is_active = 1 WHERE email = ?')->execute([$owner]);
 }
 
 /**
