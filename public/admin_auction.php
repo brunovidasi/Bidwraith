@@ -48,7 +48,6 @@ $homeCountry = marketplace_country_code(ebay_config()['marketplace_id']);
 $estimate = estimate_landed_cost($topBid, $auction['shipping_cost'], $auction['item_country'], $homeCountry);
 
 $pageTitle = $auction['title'] ?? 'Auction';
-$wideLayout = true;
 require __DIR__ . '/../includes/layout_top.php';
 ?>
 <p class="crumb"><a href="admin.php">&larr; Admin dashboard</a></p>
@@ -86,9 +85,9 @@ require __DIR__ . '/../includes/layout_top.php';
     <div><span class="detail-label">Ships from</span><?= htmlspecialchars($auction['item_country'] ?? 'unknown') ?></div>
     <div><span class="detail-label">Top scheduled bid</span><?= htmlspecialchars($currency . ' ' . number_format($topBid, 2)) ?></div>
     <div><span class="detail-label">Est. landed cost</span><?= htmlspecialchars($currency . ' ' . number_format($estimate['total'], 2)) ?></div>
-    <div><span class="detail-label">Added</span><?= htmlspecialchars($auction['created_at']) ?></div>
-    <div><span class="detail-label">Price checked</span><?= htmlspecialchars($auction['price_checked_at'] ?? 'never') ?></div>
-    <div><span class="detail-label">Last cron touch</span><?= htmlspecialchars($auction['last_checked_at'] ?? 'never') ?></div>
+    <div><span class="detail-label">Added</span><?= htmlspecialchars(db_time_local($auction['created_at']) ?? 'unknown') ?></div>
+    <div><span class="detail-label">Price checked</span><?= htmlspecialchars(db_time_local($auction['price_checked_at']) ?? 'never') ?></div>
+    <div><span class="detail-label">Last cron touch</span><?= htmlspecialchars(db_time_local($auction['last_checked_at']) ?? 'never') ?></div>
 </div>
 
 <?php if ($auction['result_message']): ?>
@@ -100,6 +99,9 @@ require __DIR__ . '/../includes/layout_top.php';
         <strong><?= htmlspecialchars($outcome['label']) ?>.</strong> <?= htmlspecialchars($outcome['detail']) ?>
     </p>
 <?php endif; ?>
+
+<div class="admin-section"><h2>What happened</h2></div>
+<?php render_auction_timeline(auction_event_timeline($auction, $steps, $log, $currency)); ?>
 
 <div class="admin-section"><h2>Scheduled bids (<?= count($steps) ?>)</h2></div>
 <?php if (!$steps): ?>
@@ -122,7 +124,7 @@ require __DIR__ . '/../includes/layout_top.php';
                     <td class="num nowrap"><?= (int) $s['seconds_before'] ?>s before end</td>
                     <td class="num"><?= htmlspecialchars(number_format($s['max_bid'], 2)) ?></td>
                     <td class="nowrap"><span class="status-<?= htmlspecialchars($s['status']) ?>"><?= htmlspecialchars($s['status']) ?></span></td>
-                    <td class="nowrap muted"><?= htmlspecialchars($s['fired_at'] ?? 'not fired') ?></td>
+                    <td class="nowrap muted"><?= htmlspecialchars(db_time_local($s['fired_at']) ?? 'not fired') ?></td>
                     <td><?= $s['result_message'] ? htmlspecialchars($s['result_message']) : '<span class="muted">—</span>' ?></td>
                 </tr>
             <?php endforeach; ?>
@@ -151,7 +153,7 @@ require __DIR__ . '/../includes/layout_top.php';
         <tbody>
             <?php foreach ($log as $entry): ?>
                 <tr>
-                    <td class="nowrap muted"><?= htmlspecialchars($entry['attempted_at']) ?></td>
+                    <td class="nowrap muted"><?= htmlspecialchars(db_time_local($entry['attempted_at'])) ?></td>
                     <td class="num"><?= htmlspecialchars(number_format($entry['max_bid'], 2)) ?> <span class="muted">@<?= (int) $entry['seconds_before'] ?>s</span></td>
                     <td class="nowrap">
                         <span class="outcome-<?= $entry['success'] ? 'ok' : 'danger' ?>"><?= $entry['success'] ? 'accepted' : 'rejected' ?></span>
@@ -165,8 +167,9 @@ require __DIR__ . '/../includes/layout_top.php';
 <?php endif; ?>
 
 <p class="hint">
-    Prices shown in <?= htmlspecialchars($currency) ?>. "Scheduled bids" is what the cron job was told
-    to do; "eBay bid attempts" is what was actually sent and what eBay said back.
+    Prices shown in <?= htmlspecialchars($currency) ?>, times in <?= htmlspecialchars(date_default_timezone_get()) ?>.
+    "Scheduled bids" is what the cron job was told to do; "eBay bid attempts" is what was actually
+    sent and what eBay said back.
 </p>
 
 <script src="assets/js/app.js"></script>

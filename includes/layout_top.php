@@ -64,7 +64,7 @@ $currentPage = basename($_SERVER['SCRIPT_NAME']);
         </nav>
     <?php endif; ?>
 </header>
-<main class="container<?= !empty($wideLayout) ? ' container-wide' : '' ?>">
+<main class="container">
 <?php if (!empty($_SESSION['flash'])): ?>
     <div class="flash flash-<?= htmlspecialchars($_SESSION['flash']['type']) ?>">
         <?= htmlspecialchars($_SESSION['flash']['message']) ?>

@@ -259,3 +259,164 @@ function estimate_landed_cost(float $price, ?float $shippingCost, ?string $itemC
         'total' => round($price + $shipping + $buyerProtectionFee + $gst, 2),
     ];
 }
+
+/**
+ * Shifts a timestamp written by SQLite into the app's timezone. The two clocks in
+ * this database disagree: columns filled by datetime('now') (created_at, fired_at,
+ * attempted_at, last_checked_at, price_checked_at) are UTC, while end_time is
+ * written by PHP in the configured app timezone — which is what cron/snipe.php
+ * compares against, so end_time is the one that must stay as it is. Anything shown
+ * beside an end time, or subtracted from one, has to come through here first.
+ */
+function db_time_local(?string $timestamp): ?string
+{
+    if ($timestamp === null || $timestamp === '') {
+        return null;
+    }
+
+    try {
+        $dt = new DateTimeImmutable($timestamp, new DateTimeZone('UTC'));
+    } catch (Exception $e) {
+        return $timestamp;
+    }
+
+    return $dt->setTimezone(new DateTimeZone(date_default_timezone_get()))->format('Y-m-d H:i:s');
+}
+
+/**
+ * Builds a chronological "what actually happened" log for one auction, merging the
+ * three sources that each hold a piece of the story: the auction row (added, ended),
+ * bid_steps (what was scheduled, and what the cron did with each one), and bid_log
+ * (what was really sent to eBay and what eBay said back).
+ *
+ * The interesting cases are the gaps between those sources:
+ *  - a step with a bid_log row actually reached eBay;
+ *  - a step marked fired with no bid_log row failed before the API call (e.g. the
+ *    user had no connected eBay account), so it gets its own event;
+ *  - a step still pending once its moment has passed never fired at all — the cron
+ *    didn't run — which is the failure worth shouting about.
+ *
+ * Returns events ordered oldest first, each ['time' => ?string, 'label' => string,
+ * 'detail' => string, 'meta' => string, 'tone' => 'ok'|'danger'|'warn'|'muted'].
+ */
+function auction_event_timeline(array $auction, array $steps, array $log, string $currency): array
+{
+    $events = [];
+    $endTs = $auction['end_time'] !== null ? strtotime($auction['end_time']) : null;
+    $settled = in_array($auction['status'], ['won', 'lost'], true);
+    $money = fn (float $amount) => $currency . ' ' . number_format($amount, 2);
+
+    // How far from the auction close a moment actually was, e.g. "4s before end".
+    $relativeToEnd = function (?string $time) use ($endTs): string {
+        if ($endTs === null || $time === null) {
+            return '';
+        }
+        $delta = $endTs - strtotime($time);
+        if ($delta >= 0) {
+            return $delta . 's before end';
+        }
+        return abs($delta) . 's after end';
+    };
+
+    $events[] = [
+        'time' => db_time_local($auction['created_at']),
+        'seq' => 0,
+        'label' => 'Auction added to the list',
+        'detail' => '',
+        'meta' => '',
+        'tone' => 'muted',
+    ];
+
+    $logByStep = [];
+    foreach ($log as $entry) {
+        $logByStep[(int) $entry['bid_step_id']][] = $entry;
+    }
+
+    foreach ($steps as $step) {
+        $events[] = [
+            'time' => db_time_local($step['created_at']),
+            'seq' => 1,
+            'label' => 'Bid scheduled: ' . $money((float) $step['max_bid']),
+            'detail' => '',
+            'meta' => 'to fire ' . (int) $step['seconds_before'] . 's before the auction ends',
+            'tone' => 'muted',
+        ];
+
+        $stepLog = $logByStep[(int) $step['id']] ?? [];
+        $firedAt = db_time_local($step['fired_at']);
+
+        if ($firedAt === null) {
+            // Only a moment that has already passed counts as a miss; anything still
+            // ahead of us is simply waiting its turn.
+            $dueAt = $endTs !== null ? $endTs - (int) $step['seconds_before'] : null;
+            $missed = $dueAt !== null && $dueAt < time();
+
+            $events[] = [
+                'time' => $dueAt !== null ? date('Y-m-d H:i:s', $dueAt) : null,
+                'seq' => 2,
+                'label' => $missed ? 'Bid never fired: ' . $money((float) $step['max_bid']) : 'Bid waiting: ' . $money((float) $step['max_bid']),
+                'detail' => $missed
+                    ? ($settled
+                        ? 'The auction was already settled by the time this bid was due, so the cron job skipped it.'
+                        : 'This bid was due here and no attempt was ever recorded — check that the cron job is running.')
+                    : '',
+                'meta' => (int) $step['seconds_before'] . 's before end',
+                'tone' => $missed ? ($settled ? 'muted' : 'danger') : 'muted',
+            ];
+            continue;
+        }
+
+        if (!$stepLog) {
+            // Fired, but nothing reached eBay — the cron gave up before the API call.
+            $events[] = [
+                'time' => $firedAt,
+                'seq' => 2,
+                'label' => 'Bid failed before reaching eBay: ' . $money((float) $step['max_bid']),
+                'detail' => $step['result_message'] ?? '',
+                'meta' => trim((int) $step['seconds_before'] . 's step · gave up ' . $relativeToEnd($firedAt), ' ·'),
+                'tone' => 'danger',
+            ];
+            continue;
+        }
+
+        foreach ($stepLog as $entry) {
+            $ok = (bool) $entry['success'];
+            $attemptedAt = db_time_local($entry['attempted_at']);
+            $events[] = [
+                'time' => $attemptedAt,
+                'seq' => 2,
+                'label' => ($ok ? 'Bid placed on eBay: ' : 'Bid rejected by eBay: ') . $money((float) $step['max_bid']),
+                'detail' => $entry['response_summary'] ?? '',
+                'meta' => trim((int) $step['seconds_before'] . 's step · fired ' . $relativeToEnd($attemptedAt), ' ·'),
+                'tone' => $ok ? 'ok' : 'danger',
+            ];
+        }
+    }
+
+    if ($endTs !== null) {
+        $ended = $endTs < time();
+        $events[] = [
+            'time' => $auction['end_time'],
+            'seq' => 3,
+            'label' => $ended ? 'Auction ended' : 'Auction ends',
+            'detail' => $ended && !$settled
+                ? 'The app never checked the final result on eBay, so whether you won is unknown here.'
+                : '',
+            'meta' => $ended ? 'final status: ' . $auction['status'] : '',
+            'tone' => match (true) {
+                $auction['status'] === 'won' => 'ok',
+                $auction['status'] === 'lost' => 'muted',
+                !$ended => 'muted',
+                default => 'warn',
+            },
+        ];
+    }
+
+    usort($events, function ($a, $b) {
+        $at = $a['time'] === null ? PHP_INT_MAX : strtotime($a['time']);
+        $bt = $b['time'] === null ? PHP_INT_MAX : strtotime($b['time']);
+        return [$at, $a['seq']] <=> [$bt, $b['seq']];
+    });
+
+    return $events;
+}

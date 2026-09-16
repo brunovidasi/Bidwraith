@@ -92,18 +92,15 @@ require __DIR__ . '/../includes/layout_top.php';
         $estimate = estimate_landed_cost($effectiveMaxBid, $a['shipping_cost'], $a['item_country'], $homeCountry);
         $editable = !in_array($a['status'], ['won', 'lost'], true);
         $editUrl = 'edit_auction.php?id=' . (int) $a['id'];
+        $detailUrl = 'auction.php?id=' . (int) $a['id'];
         $titleText = htmlspecialchars($a['title'] ?? '(unknown title)');
     ?>
         <article class="entry">
             <?php if (!empty($a['image_url'])): ?>
-                <?php if ($editable): ?>
-                    <a href="<?= $editUrl ?>"><img class="entry-thumb" src="<?= htmlspecialchars($a['image_url']) ?>" alt=""></a>
-                <?php else: ?>
-                    <img class="entry-thumb" src="<?= htmlspecialchars($a['image_url']) ?>" alt="">
-                <?php endif; ?>
+                <a href="<?= $detailUrl ?>"><img class="entry-thumb" src="<?= htmlspecialchars($a['image_url']) ?>" alt=""></a>
             <?php endif; ?>
             <div class="entry-main">
-                <h3 class="entry-title"><?= $editable ? '<a href="' . $editUrl . '">' . $titleText . '</a>' : $titleText ?></h3>
+                <h3 class="entry-title"><a href="<?= $editable ? $editUrl : $detailUrl ?>"><?= $titleText ?></a></h3>
                 <p class="entry-meta">
                     Item <?= htmlspecialchars($a['item_id']) ?>
                     <span class="sep">·</span>
@@ -155,6 +152,7 @@ require __DIR__ . '/../includes/layout_top.php';
                     <p class="hint">Ships from overseas (<?= htmlspecialchars($a['item_country']) ?>)</p>
                 <?php endif; ?>
                 <div class="entry-actions">
+                    <a class="entry-link" href="<?= $detailUrl ?>">Details &amp; log</a>
                     <?php if ($editable): ?>
                         <a class="entry-link" href="<?= $editUrl ?>">Edit bids</a>
                     <?php endif; ?>
@@ -189,7 +187,7 @@ require __DIR__ . '/../includes/layout_top.php';
     ?>
     <p class="hint">
         "Bids" shows what the cron job did as each auction closed. "Never fired" means the
-        scheduled bid never ran at all.
+        scheduled bid never ran at all. Open any auction for the full log of what happened.
     </p>
 <?php endif; ?>
 

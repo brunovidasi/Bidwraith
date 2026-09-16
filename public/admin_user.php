@@ -52,9 +52,8 @@ foreach ($pastRows as &$pastRow) {
 unset($pastRow);
 
 $pageTitle = $viewed['email'];
-$wideLayout = true;
 $currency = ebay_config()['currency'];
-$adminLinks = true;
+$detailPage = 'admin_auction.php';
 require __DIR__ . '/../includes/layout_top.php';
 ?>
 <p class="crumb"><a href="admin.php">&larr; Admin dashboard</a></p>

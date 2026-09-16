@@ -8,8 +8,9 @@
  * table instead of the top of the page.
  */
 $showOwner = $showOwner ?? false;
-// Only the admin views link through to the detail pages; the user's own list must not.
-$adminLinks = $adminLinks ?? false;
+// Each title links through to a detail page: the admin views to their own, everyone
+// else to the user-facing one, which only ever shows the viewer's own auctions.
+$detailPage = $detailPage ?? 'auction.php';
 $sortKey = $sortKey ?? 'end';
 $sortDir = $sortDir ?? 'desc';
 $sortParam = $sortParam ?? 'psort';
@@ -40,7 +41,7 @@ $anchor = $anchor ?? '';
                 <tr>
                     <td class="cell-title" title="<?= htmlspecialchars($row['title'] ?? '') ?>">
                         <?php $title = htmlspecialchars($row['title'] ?? '(unknown title)'); ?>
-                        <?= $adminLinks ? '<a href="admin_auction.php?id=' . (int) $row['id'] . '">' . $title . '</a>' : $title ?>
+                        <a href="<?= htmlspecialchars($detailPage) ?>?id=<?= (int) $row['id'] ?>"><?= $title ?></a>
                         <span class="muted"><?= htmlspecialchars($row['item_id']) ?></span>
                     </td>
                     <?php if ($showOwner): ?>

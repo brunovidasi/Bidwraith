@@ -115,7 +115,6 @@ function admin_top_bid(PDOStatement $stmt, int $auctionId): float
 }
 
 $pageTitle = 'Admin';
-$wideLayout = true;
 $currency = ebay_config()['currency'];
 require __DIR__ . '/../includes/layout_top.php';
 ?>
@@ -238,7 +237,7 @@ foreach ($pastRows as &$pastRow) {
 }
 unset($pastRow);
 $showOwner = true;
-$adminLinks = true;
+$detailPage = 'admin_auction.php';
 $sortKey = $section['sortKey'];
 $sortDir = $section['sortDir'];
 $sortParam = $section['sortParam'];
